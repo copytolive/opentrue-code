@@ -1,0 +1,39 @@
+name: OpenTrue Code Acceptance CI
+on:
+  push:
+    paths:
+      - "control-plane/**"
+      - "local-bridge/**"
+      - "workers/**"
+      - "loadtest/**"
+      - "scripts/**"
+      - "docker-compose.sandbox.yml"
+      - ".github/workflows/control-plane-ci.yml"
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - run: npm install --ignore-scripts
+        working-directory: control-plane
+      - name: Block high/critical npm advisories
+        working-directory: control-plane
+        run: npm run audit:high
+      - name: Validate Node entrypoints
+        run: node --check control-plane/src/server.mjs local-bridge/src/bridge.mjs workers/vast-worker.mjs workers/sandbox-worker.mjs workers/deploy-worker.mjs scripts/mint-token.mjs scripts/model-benchmark.mjs
+      - name: Validate shell entrypoints
+        run: bash -n scripts/acceptance-local.sh scripts/deploy-approved.sh scripts/install-vast-worker.sh scripts/backup-restore-drill.sh scripts/sandbox-escape-test.sh scripts/install-macos.sh scripts/install-local-bridge-macos.sh scripts/install-deploy-worker-linux.sh scripts/validate-public-repo.sh
+      - name: Public repository policy
+        run: sh scripts/validate-public-repo.sh
+      - name: Install sandbox verifier
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends bubblewrap
+      - run: sh scripts/acceptance-local.sh
+      - name: Prove bubblewrap isolation
+        run: sudo sh scripts/sandbox-escape-test.sh

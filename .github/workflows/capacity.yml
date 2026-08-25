@@ -1,0 +1,67 @@
+name: Capacity 100-1000 users
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Staging control-plane URL, for example https://staging.example.com/api"
+        required: true
+        type: string
+      duration:
+        description: "Duration per stage"
+        required: true
+        default: "60s"
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: opentrue-capacity-staging
+  cancel-in-progress: false
+jobs:
+  capacity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BASE_URL: ${{ inputs.base_url }}
+      DURATION: ${{ inputs.duration }}
+      AUTH_SIGNING_SECRET: ${{ secrets.CAPACITY_AUTH_SIGNING_SECRET }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Validate staging target and secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${#AUTH_SIGNING_SECRET}" -ge 32 || { echo "CAPACITY_AUTH_SIGNING_SECRET is missing/too short" >&2; exit 1; }
+          case "$BASE_URL" in https://*) ;; *) echo "capacity target must be HTTPS staging, not localhost" >&2; exit 1;; esac
+      - name: Generate 1000 isolated test identities
+        run: LOADTEST_USERS=1000 node scripts/generate-loadtest-tokens.mjs > loadtest/tokens.json
+      - name: Run 100, 500, and 1000 VU gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p loadtest/results
+          for vus in 100 500 1000; do
+            echo "=== capacity stage: ${vus} VUs for ${DURATION} ==="
+            docker run --rm \
+              -v "$PWD:/work" \
+              -e BASE_URL \
+              -e DURATION \
+              -e VUS="$vus" \
+              -e TOKENS_FILE=/work/loadtest/tokens.json \
+              grafana/k6:2.2.0 \
+              run --summary-export "/work/loadtest/results/${vus}-vu.json" /work/loadtest/control-plane.js
+          done
+          sha256sum loadtest/results/*.json | tee loadtest/results/SHA256SUMS
+      - name: Upload capacity evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: capacity-${{ github.run_id }}
+          path: loadtest/results/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Remove generated credentials
+        if: always()
+        run: rm -f loadtest/tokens.json

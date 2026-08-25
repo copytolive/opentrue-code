@@ -1,0 +1,78 @@
+name: Agent parity
+
+on:
+  pull_request:
+    paths:
+      - 'agent-runtime/**'
+      - 'local-bridge/**'
+      - 'ui/**'
+      - 'workers/**'
+      - 'scripts/cursor-parity-evidence.mjs'
+      - 'scripts/install-background-agent-linux.sh'
+      - 'scripts/install-vast-autoscaler-linux.sh'
+      - '.opentrue/**'
+      - '.github/workflows/agent-parity.yml'
+      - 'docs/CURSOR_PARITY.md'
+  push:
+    branches: [main]
+    paths:
+      - 'agent-runtime/**'
+      - 'local-bridge/**'
+      - 'ui/**'
+      - 'workers/**'
+      - 'scripts/cursor-parity-evidence.mjs'
+      - 'scripts/install-background-agent-linux.sh'
+      - 'scripts/install-vast-autoscaler-linux.sh'
+      - '.opentrue/**'
+      - '.github/workflows/agent-parity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: agent-runtime/package.json
+      - name: Agent runtime syntax
+        run: npm run check
+        working-directory: agent-runtime
+      - name: Agent runtime tests
+        run: npm test
+        working-directory: agent-runtime
+      - name: Local Bridge tests
+        run: npm test
+        working-directory: local-bridge
+      - name: Worker syntax
+        run: |
+          node --check workers/vast-worker.mjs
+          node --check workers/vast-autoscaler.mjs
+          node --check workers/deploy-worker.mjs
+          node --check workers/sandbox-worker.mjs
+      - name: Installer syntax
+        run: |
+          bash -n scripts/install-background-agent-linux.sh
+          bash -n scripts/install-vast-autoscaler-linux.sh
+          bash -n scripts/install-local-bridge-macos.sh
+          bash -n scripts/install-deploy-worker-linux.sh
+      - name: CLI smoke
+        run: |
+          node agent-runtime/bin/opentrue.mjs capabilities
+          node agent-runtime/bin/opentrue.mjs index
+          node agent-runtime/bin/opentrue.mjs search "control plane"
+          node agent-runtime/bin/opentrue.mjs mcp-tools repo
+      - name: Repository parity evidence
+        run: node scripts/cursor-parity-evidence.mjs --require-repo
+      - name: Fail if runtime adds dependencies
+        run: |
+          node - <<'NODE'
+          const p=require('./agent-runtime/package.json');
+          if (p.dependencies && Object.keys(p.dependencies).length) process.exit(1);
+          console.log('PASS: agent runtime uses Node built-ins only');
+          NODE

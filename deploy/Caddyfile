@@ -1,0 +1,22 @@
+{
+  email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+  handle_path /api/* {
+    reverse_proxy control-plane:8787
+  }
+  reverse_proxy ui:3000
+}
+
+agent.{$BASE_DOMAIN} {
+  redir https://{$APP_DOMAIN}{uri} permanent
+}
+
+ide.{$BASE_DOMAIN} {
+  reverse_proxy editor:8080
+}
+
+chat.{$BASE_DOMAIN} {
+  reverse_proxy chat:8080
+}

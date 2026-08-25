@@ -1,0 +1,161 @@
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: opentrue
+      POSTGRES_USER: opentrue
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./control-plane/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opentrue -d opentrue"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: postgres:17.11-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./control-plane/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for f in /migrations/*.sql; do
+          echo "Applying $f"
+          psql -v ON_ERROR_STOP=1 -h postgres -U opentrue -d opentrue -f "$f"
+        done
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  redis:
+    image: redis:8.2.8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control-plane:
+    build: ./control-plane
+    restart: unless-stopped
+    environment:
+      AUTH_SIGNING_SECRET: ${AUTH_SIGNING_SECRET:?Set AUTH_SIGNING_SECRET in .env}
+      BILLING_WEBHOOK_SECRET: ${BILLING_WEBHOOK_SECRET:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      RATE_LIMIT_USER_PER_MINUTE: ${RATE_LIMIT_USER_PER_MINUTE:-240}
+      RATE_LIMIT_WORKER_PER_MINUTE: ${RATE_LIMIT_WORKER_PER_MINUTE:-1200}
+      RATE_LIMIT_BILLING_PER_MINUTE: ${RATE_LIMIT_BILLING_PER_MINUTE:-120}
+      DATABASE_URL: postgres://opentrue:${POSTGRES_PASSWORD}@postgres:5432/opentrue
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      WORKSPACE_ROOT: /workspace
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./workspace:/workspace
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  ui:
+    build: ./ui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - control-plane
+
+  gateway:
+    image: caddy:2.11.4-alpine
+    profiles: [production]
+    restart: unless-stopped
+    environment:
+      BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN in .env}
+      APP_DOMAIN: ${APP_DOMAIN:-${BASE_DOMAIN}}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - ui
+      - editor
+      - chat
+      - control-plane
+
+  editor:
+    build:
+      context: ./editor
+      args:
+        CODE_SERVER_IMAGE: ${CODE_SERVER_IMAGE:?Set immutable CODE_SERVER_IMAGE in .env}
+        CLINE_VERSION: ${CLINE_VERSION:-4.1.3}
+    restart: unless-stopped
+    environment:
+      PASSWORD: ${CODE_SERVER_PASSWORD:?Set CODE_SERVER_PASSWORD in .env}
+      TZ: ${TZ:-Asia/Jakarta}
+      OLLAMA_HOST: http://ollama:11434
+      NO_PROXY: ollama,localhost,127.0.0.1
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./workspace:/home/coder/workspace
+      - editor-config:/home/coder/.config
+    depends_on:
+      ollama-model: {condition: service_completed_successfully}
+
+  ollama:
+    image: ${OLLAMA_IMAGE:?Set immutable OLLAMA_IMAGE in .env}
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  ollama-model:
+    image: ${OLLAMA_IMAGE:?Set immutable OLLAMA_IMAGE in .env}
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "${OLLAMA_MODEL:-qwen3-coder:30b}"]
+    depends_on:
+      ollama: {condition: service_healthy}
+
+  chat:
+    image: ${OPEN_WEBUI_IMAGE:?Set immutable OPEN_WEBUI_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "true"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in .env}
+    ports:
+      - "127.0.0.1:3001:8080"
+    volumes:
+      - chat-data:/app/backend/data
+    depends_on:
+      ollama-model: {condition: service_completed_successfully}
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+  editor-config:
+  ollama-data:
+  chat-data:

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "repo": {
+      "command": "node",
+      "args": ["agent-runtime/examples/mcp-repo-server.mjs"],
+      "cwd": "."
+    }
+  }
+}

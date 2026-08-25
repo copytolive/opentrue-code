@@ -1,0 +1,47 @@
+# Local runtime secrets and environment
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Private workspaces and runtime state
+workspace/
+data/
+backups/
+receipts/
+*.dump
+*.sql.gz
+*.log
+
+# OpenTrue agent local state (rules and skills remain commit-able)
+.opentrue/memory.json
+.opentrue/checkpoints/
+.opentrue/worktrees/
+.opentrue/browser/
+.opentrue/receipts/
+.opentrue/index/
+
+# Model weights must never be committed to the public repository
+*.gguf
+*.safetensors
+*.ckpt
+*.onnx
+*.pt
+*.pth
+
+# Build/dependency output
+node_modules/
+.next/
+dist/
+coverage/
+
+# OS/editor noise
+.DS_Store
+.vscode/settings.json
+.idea/

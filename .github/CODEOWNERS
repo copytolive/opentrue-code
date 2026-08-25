@@ -1,0 +1,10 @@
+# Production-sensitive repository. CODEOWNERS does not replace branch protection;
+# repository rules must require CODEOWNER review on main.
+* @narzulalistiqlal
+
+/.github/ @narzulalistiqlal
+/control-plane/ @narzulalistiqlal
+/workers/ @narzulalistiqlal
+/local-bridge/ @narzulalistiqlal
+/deploy/ @narzulalistiqlal
+/scripts/ @narzulalistiqlal

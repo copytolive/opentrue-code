@@ -1,0 +1,9 @@
+{
+  "name":"@opentrue/agent-runtime",
+  "version":"0.2.0",
+  "private":true,
+  "type":"module",
+  "bin":{"opentrue":"./bin/opentrue.mjs"},
+  "scripts":{"test":"node --test test/*.test.mjs","check":"node --check src/runtime.mjs && node --check bin/opentrue.mjs"},
+  "engines":{"node":">=22"}
+}

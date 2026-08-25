@@ -1,0 +1,29 @@
+services:
+  sandbox-worker:
+    profiles: ["sandbox"]
+    build:
+      context: ./workers
+      dockerfile: Dockerfile.sandbox
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8787
+      CONTROL_PLANE_TOKEN: ${SANDBOX_WORKER_TOKEN:?Set SANDBOX_WORKER_TOKEN}
+      SANDBOX_WORKSPACE_ROOT: /workspaces
+      SANDBOX_PAYLOAD_UID: ${SANDBOX_PAYLOAD_UID:-1000}
+      SANDBOX_PAYLOAD_GID: ${SANDBOX_PAYLOAD_GID:-1000}
+      WORKER_LEASE_MS: ${WORKER_LEASE_MS:-90000}
+    volumes:
+      - ${SANDBOX_WORKSPACE_ROOT:?Set SANDBOX_WORKSPACE_ROOT}:/workspaces
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop: ["ALL"]
+    cap_add: ["NET_ADMIN"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: 2.0
+    depends_on:
+      - control-plane

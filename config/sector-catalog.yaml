@@ -1,0 +1,46 @@
+version: 1
+sectors:
+  - id: software
+    label: Software & DevOps
+    tools: [workspace, terminal, git, github, ci, deploy, browser]
+    approval_gates: [push, merge, production-deploy, delete, secrets]
+
+  - id: property
+    label: Property & Construction
+    tools: [documents, spreadsheets, boq, schedule, maps, reporting]
+    approval_gates: [external-publish, contract-send, payment]
+
+  - id: trading
+    label: Trading Research
+    tools: [market-data, backtest, reports, alerts]
+    approval_gates: [live-order, wallet, withdrawal, leverage-change]
+
+  - id: healthcare
+    label: Healthcare Operations
+    tools: [documents, scheduling, knowledge, reporting]
+    approval_gates: [patient-data, diagnosis, prescription, clinical-action]
+
+  - id: finance
+    label: Finance & FP&A
+    tools: [spreadsheets, documents, forecasting, variance, reporting]
+    approval_gates: [payment, bank-action, external-filing]
+
+  - id: legal
+    label: Legal Documents
+    tools: [documents, research, redline, evidence-index]
+    approval_gates: [filing, signature, send, legal-representation]
+
+  - id: marketing
+    label: Marketing & Content
+    tools: [writing, images, campaigns, analytics]
+    approval_gates: [public-post, ad-spend, customer-message]
+
+  - id: customer-support
+    label: Customer Support
+    tools: [knowledge, tickets, summaries, drafts]
+    approval_gates: [refund, account-change, outbound-send]
+
+  - id: research
+    label: Research & Intelligence
+    tools: [web, documents, citations, datasets]
+    approval_gates: [external-publish, private-data-export]

@@ -1,0 +1,53 @@
+version: 1
+policy:
+  model_service: self-hosted
+  user_billing_unit: subscription
+  token_meter_visible_to_user: false
+  routing: capability-and-load
+
+models:
+  - id: qwen-coder-fast
+    family: Qwen3-Coder
+    role: coding-fast
+    license_review: required-before-production
+    runtime: ollama-or-vllm
+    minimum_vram_gb: 24
+    use_for: [autocomplete, small-edits, tests, documentation]
+
+  - id: qwen-coder-agent
+    family: Qwen3-Coder
+    role: coding-agent
+    license_review: required-before-production
+    runtime: vllm
+    minimum_vram_gb: 48
+    use_for: [multi-file, debugging, refactor, repository-agent]
+
+  - id: deepseek-reasoning
+    family: DeepSeek-R1-or-V3-distill
+    role: reasoning
+    license_review: required-before-production
+    runtime: ollama-or-vllm
+    minimum_vram_gb: 24
+    use_for: [planning, analysis, difficult-debugging]
+
+  - id: qwen-vision
+    family: Qwen3-VL
+    role: vision
+    license_review: required-before-production
+    runtime: vllm
+    minimum_vram_gb: 24
+    use_for: [screenshots, documents, diagrams, visual-qa]
+
+  - id: medical-assist
+    family: MedGemma
+    role: healthcare-assist
+    license_review: gated-terms
+    runtime: vllm
+    minimum_vram_gb: 24
+    use_for: [medical-text-support, medical-image-support]
+    restrictions: [no-autonomous-diagnosis, human-clinician-review]
+
+notes:
+  - Full DeepSeek V4 Pro is not the default single-GPU model.
+  - Exact model IDs and licenses must be pinned in the production bill of materials.
+  - Models with gated or custom terms are not advertised as unrestricted open source.

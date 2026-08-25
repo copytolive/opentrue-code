@@ -1,0 +1,84 @@
+name: control-plane
+on:
+  pull_request:
+    paths:
+      - "control-plane/**"
+      - "workers/**"
+      - "scripts/backup-restore-drill.sh"
+      - "scripts/smoke-control-plane.sh"
+      - "scripts/mint-token.mjs"
+      - "scripts/model-benchmark.mjs"
+      - "docker-compose.yml"
+      - "docker-compose.sandbox.yml"
+      - ".github/workflows/control-plane.yml"
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_DB: opentrue
+          POSTGRES_USER: opentrue
+          POSTGRES_PASSWORD: test-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U opentrue -d opentrue"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:8.2.8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: control-plane
+    env:
+      MIGRATION_DATABASE_URL: postgres://opentrue:test-password@127.0.0.1:5432/opentrue
+      TEST_DATABASE_URL: postgres://opentrue_app:app-password@127.0.0.1:5432/opentrue
+      TEST_REDIS_URL: redis://127.0.0.1:6379
+      PGPASSWORD: test-password
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: 22}
+      - run: npm install --no-audit --no-fund
+      - name: Block high/critical npm advisories
+        run: npm run audit:high
+      - run: |
+          for f in migrations/*.sql; do psql -v ON_ERROR_STOP=1 "$MIGRATION_DATABASE_URL" -f "$f"; done
+      - run: >-
+          psql "$MIGRATION_DATABASE_URL" -c "CREATE ROLE opentrue_app LOGIN PASSWORD 'app-password' NOSUPERUSER;
+          GRANT CONNECT ON DATABASE opentrue TO opentrue_app;
+          GRANT USAGE ON SCHEMA public TO opentrue_app;
+          GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO opentrue_app;
+          GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO opentrue_app;"
+      - run: npm test
+      - name: Syntax check control-plane and workers
+        working-directory: .
+        run: node --check control-plane/src/server.mjs control-plane/src/postgres.mjs control-plane/src/redis-queue.mjs workers/vast-worker.mjs workers/sandbox-worker.mjs workers/deploy-worker.mjs scripts/mint-token.mjs scripts/model-benchmark.mjs
+      - name: HTTP user-worker-billing-deployment smoke
+        working-directory: .
+        env:
+          AUTH_SIGNING_SECRET: smoke-auth-signing-secret-at-least-32-characters
+          BILLING_WEBHOOK_SECRET: smoke-billing-webhook-secret-at-least-32-characters
+        run: |
+          AUTH_SIGNING_SECRET="$AUTH_SIGNING_SECRET" \
+          BILLING_WEBHOOK_SECRET="$BILLING_WEBHOOK_SECRET" \
+          DATABASE_URL="$TEST_DATABASE_URL" \
+          REDIS_URL="$TEST_REDIS_URL" \
+          PORT=8787 node control-plane/src/server.mjs >/tmp/opentrue-control-plane.log 2>&1 &
+          server_pid=$!
+          trap 'status=$?; kill "$server_pid" 2>/dev/null || true; if [ "$status" -ne 0 ]; then cat /tmp/opentrue-control-plane.log; fi; exit "$status"' EXIT
+          sh scripts/smoke-control-plane.sh
+      - name: backup restore drill
+        working-directory: .
+        run: |
+          createdb -h 127.0.0.1 -U opentrue opentrue_restore
+          SOURCE_DATABASE_URL="$MIGRATION_DATABASE_URL" \
+          RESTORE_DATABASE_URL="postgres://opentrue:test-password@127.0.0.1:5432/opentrue_restore" \
+          PG_CLIENT_IMAGE="postgres:17.11-alpine" \
+          sh scripts/backup-restore-drill.sh
