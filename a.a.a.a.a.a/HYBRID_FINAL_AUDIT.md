@@ -6,7 +6,7 @@ Primary mode: `HYBRID_MANUAL_EXECUTION`
 
 ## Final verification evidence
 
-- Full regression suite: **71 passed**
+- Full regression suite: **72 passed**
 - Import smoke: **71 modules, 0 failures**
 - Python `compileall`: **PASS**
 - Hybrid configuration validation: **PASS**
@@ -14,14 +14,15 @@ Primary mode: `HYBRID_MANUAL_EXECUTION`
 - Wheel build: **PASS**
 - Isolated wheel install: **PASS**
 - Installed `tapeout-hybrid --help`: **PASS**
+- Regression executed from extracted final ZIP: **72 passed**
 
 Wheel SHA-256:
 
-`9d5d6cf3f9f099c52fc91654796abb82c71eea8f7ea92f1fec043573fb340f12`
+`3e6b8c1cc1fb7aff5c66a0e4df21755c4364c3946a844c672e6bfb15bf6c57f1`
 
 Full source ZIP SHA-256:
 
-`6455e3b211162bd2a5269856cbca928a48a6eb15e9b433ab1a9c65b49517a1eb`
+`21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e`
 
 ## Requested 15 hybrid targets
 
