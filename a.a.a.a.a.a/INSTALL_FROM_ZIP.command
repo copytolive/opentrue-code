@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-EXPECTED_SHA='6455e3b211162bd2a5269856cbca928a48a6eb15e9b433ab1a9c65b49517a1eb'
+EXPECTED_SHA='21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e'
 TARGET='/Users/Shared/WorkspaceBersama/opentrue.org (loading ke antigravity)/a.a.a.a.a.a'
 ZIP_PATH="${1:-$HOME/Downloads/tapeout_hybrid_v7_FINAL.zip}"
 
@@ -30,16 +30,15 @@ fi
 
 mkdir -p "$TARGET"
 
-# Preserve private/local state if it already exists. Source archive does not
-# contain these paths, and rsync excludes them explicitly as a second guard.
+# Preserve private/local state on upgrade.
 rsync -a \
   --exclude='.runtime/' \
   --exclude='.hybrid.env' \
   --exclude='.venv/' \
-  --exclude='state/' \
-  --exclude='manual-packages/' \
+  --exclude='state/*.sqlite*' \
   "$SOURCE/" "$TARGET/"
 
+chmod +x "$TARGET/SYNC_TO_MACBOOK.command" 2>/dev/null || true
 chmod +x "$TARGET"/macos/*.sh 2>/dev/null || true
 
 echo "Hybrid v7 source installed to:"
