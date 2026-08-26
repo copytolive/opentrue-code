@@ -1,0 +1,21 @@
+# Hybrid v7 private/local runtime
+.hybrid.env
+.runtime/
+.venv/
+state/
+manual-packages/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+__pycache__/
+.pytest_cache/
+dist/
+*.whl
+
+# Never commit wallet material
+*.key
+*.pem
+*private-key*
+*seed-phrase*
+*mnemonic*
