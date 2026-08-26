@@ -1,55 +1,40 @@
-# Hybrid v7 Final Audit
+# TapeOut Hybrid v7.1 — Final Audit
 
-Version: `7.0.0`
+## Software verification
 
-Primary mode: `HYBRID_MANUAL_EXECUTION`
+- Regression suite: **74 passed**
+- Extracted final ZIP regression: **74 passed**
+- Installed wheel dashboard smoke: **PASS**
+- Missing-live-env localhost resilience: **PASS**
+- macOS shell syntax: **PASS**
+- Hybrid wallet boundary: manual only
+- Dashboard: `127.0.0.1:8787`
 
-## Final verification evidence
+Final distribution hashes:
 
-- Full regression suite: **72 passed**
-- Import smoke: **71 modules, 0 failures**
-- Python `compileall`: **PASS**
-- Hybrid configuration validation: **PASS**
-- macOS shell syntax validation: **PASS**
-- Wheel build: **PASS**
-- Isolated wheel install: **PASS**
-- Installed `tapeout-hybrid --help`: **PASS**
-- Regression executed from extracted final ZIP: **72 passed**
+- `tapeout_hybrid_v7.1_FINAL.zip`
+  - SHA-256: `d12dc52f0d13aa14b86cbe774d7d4242657f15b3f74b7f79cddf868a181b1baa`
+- `tapeout_design_engine-7.1.0-py3-none-any.whl`
+  - SHA-256: `337305545ea6a85f81523d27f8b39450b66c029db9a9fe6a230ddee29c6ce7d1`
 
-Wheel SHA-256:
+## Localhost incident fix
 
-`3e6b8c1cc1fb7aff5c66a0e4df21755c4364c3946a844c672e6bfb15bf6c57f1`
+The `ERR_CONNECTION_REFUSED` failure mode was reproduced conceptually and fixed at the bootstrap boundary. The final tests explicitly start the dashboard with required live environment variables absent and verify that HTTP still responds with `SETUP_REQUIRED`.
 
-Full source ZIP SHA-256:
+Root fixes:
 
-`21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e`
+1. disabled execution no longer constructs an external signer;
+2. dashboard starts through `ResilientHybridFacade` before full live-engine construction;
+3. incomplete setup does not crash the HTTP service;
+4. daemon remains alive and retries;
+5. installer/repair scripts verify `/api/summary` before success.
 
-## Requested 15 hybrid targets
+## Money truth boundary
 
-1. Hybrid state machine — DONE.
-2. Manual TapeOut Package — DONE.
-3. Expiry/revalidation — DONE.
-4. Manual transaction recorder — DONE.
-5. Expected/paper/realized accounting — DONE.
-6. Frozen-prediction L6 bootstrap — DONE.
-7. Local opportunity dashboard — DONE.
-8. TOP-10 watchlist — DONE.
-9. Competition monitor — DONE.
-10. Reward-aware search allocation — DONE.
-11. Search champion improvement loop — DONE.
-12. One-screen manual safety checklist — DONE.
-13. Post-tapeout competitor/reward monitoring — DONE.
-14. Learning/calibration report — DONE.
-15. KPI `Realized Net USD / Capital / Day` — DONE.
+A functioning local application does not guarantee profit. `MONEY READINESS` requires verified live data and a current opportunity that passes the economic/stress/probability/recheck gates.
 
-## Wallet boundary
+The public/bundled live adapters remain fail-closed placeholders unless replaced by audited production adapters. No private key is required by Hybrid mode.
 
-Hybrid v7 does not sign or broadcast wallet transactions. It does not need or store a private key. Wallet execution stays manual.
+## L6
 
-## Fail-closed boundaries
-
-`verified=true` for an adapter is an operator/audit assertion and is not inferred automatically. Unknown or stale task/chain/market/protocol data results in WAIT / DO_NOT_TAPEOUT.
-
-## L6 truth
-
-The calibration gate exists and is tested, but a fresh deployment is not pre-certified at 90%. It requires immutable forward predictions followed by real realized outcomes, with sufficient sample count, global and recent-window 95% Wilson lower bounds meeting the configured threshold, and Brier/ECE limits passing.
+L6 is not pre-certified. It stays `PREDICTION_UNCERTIFIED` / `CALIBRATING` until real frozen forward recommendations and realized outcomes satisfy the statistical requirements.
