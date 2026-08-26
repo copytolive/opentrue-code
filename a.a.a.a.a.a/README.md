@@ -38,18 +38,19 @@ Implemented targets:
 14. Predicted-vs-realized learning, Brier/ECE/calibration curve/payback error.
 15. Primary KPI: **Realized Net USD / Capital / Day**.
 
-## Verification
+## Final verification
 
-Hybrid v7.0.0 final snapshot:
+Hybrid v7.0.0 final distribution:
 
-- `pytest`: **71 passed**
+- `pytest`: **72 passed**
 - import smoke: **71 modules / 0 failures**
 - `compileall`: PASS
 - hybrid config validation: PASS
 - macOS shell syntax: PASS
 - wheel build/install/CLI smoke: PASS
-- wheel SHA-256: `9d5d6cf3f9f099c52fc91654796abb82c71eea8f7ea92f1fec043573fb340f12`
-- full source ZIP SHA-256: `6455e3b211162bd2a5269856cbca928a48a6eb15e9b433ab1a9c65b49517a1eb`
+- extracted-distribution regression: **72 passed**
+- wheel SHA-256: `3e6b8c1cc1fb7aff5c66a0e4df21755c4364c3946a844c672e6bfb15bf6c57f1`
+- full source ZIP SHA-256: `21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e`
 
 ## MacBook target
 
@@ -61,7 +62,7 @@ Private runtime/operator data belongs under:
 
 `.../a.a.a.a.a.a/.runtime/`
 
-`.runtime`, `.hybrid.env`, SQLite state, logs, virtualenv and wallet/private-key material must never be committed.
+Public GitHub contains safe operator documentation/templates only; use the verified source ZIP for the complete tested source tree. `.runtime`, `.hybrid.env`, SQLite state, logs, virtualenv and wallet/private-key material must never be committed.
 
 ## Live truth boundary
 
