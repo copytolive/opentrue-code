@@ -17,7 +17,7 @@ The verified full-source distribution is `tapeout_hybrid_v7_FINAL.zip`.
 
 Expected SHA-256:
 
-`6455e3b211162bd2a5269856cbca928a48a6eb15e9b433ab1a9c65b49517a1eb`
+`21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e`
 
 Use `INSTALL_FROM_ZIP.command` in this directory and pass the downloaded ZIP path.
 
@@ -29,6 +29,8 @@ chmod +x INSTALL_FROM_ZIP.command
 ```
 
 The installer verifies the SHA-256 before copying anything.
+
+Alternatively, after manually extracting the ZIP, run `SYNC_TO_MACBOOK.command` from inside the extracted `a.a.a.a.a.a` directory.
 
 ## Configure
 
@@ -69,7 +71,7 @@ Status:
 5. Paste the resulting BNB transaction hash into the local dashboard.
 6. Engine verifies receipt/task/processor/circuit/cost and moves to monitoring.
 7. Record actual realized BEM/USD when sold.
-8. Outcome enters L6 calibration and the next L8-style capital recommendation.
+8. Outcome enters L6 calibration and the next capital recommendation.
 
 ## Truth boundary
 
