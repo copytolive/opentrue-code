@@ -1,4 +1,4 @@
-# TapeOut Hybrid Production v7
+# TapeOut Hybrid Production v7.1
 
 Primary mode: **HYBRID_MANUAL_EXECUTION**.
 
@@ -12,6 +12,26 @@ Human boundary:
 
 The Hybrid controller does **not** sign or broadcast wallet transactions and does not require a private key.
 
+## Localhost v7.1 fix
+
+`ERR_CONNECTION_REFUSED` on `127.0.0.1:8787` is fixed at the bootstrap layer:
+
+- disabled wallet execution no longer constructs an external signer;
+- dashboard HTTP binds through a resilient facade before the full live engine is built;
+- missing env/RPC/adapters produce `SETUP_REQUIRED` instead of killing the dashboard;
+- the daemon persists and retries instead of launchd crash-looping;
+- macOS installer and repair scripts prove `/api/summary` is reachable before reporting success.
+
+Final verification:
+
+- regression: **74 passed**;
+- extracted final ZIP regression: **74 passed**;
+- installed wheel dashboard smoke: PASS;
+- missing-live-env localhost smoke: PASS;
+- shell syntax: PASS;
+- final ZIP SHA-256: `d12dc52f0d13aa14b86cbe774d7d4242657f15b3f74b7f79cddf868a181b1baa`;
+- wheel SHA-256: `337305545ea6a85f81523d27f8b39450b66c029db9a9fe6a230ddee29c6ce7d1`.
+
 ## Requested production flow
 
 Statuses:
@@ -20,37 +40,7 @@ Statuses:
 
 Live deterioration produces `DO_NOT_TAPEOUT`.
 
-Implemented targets:
-
-1. Hybrid decision state machine.
-2. Immutable Manual TapeOut Package with circuit/netlist/proof/economics/expiry.
-3. Live expiry/revalidation with immutable replacement package.
-4. Manual transaction recorder from BNB tx hash + receipt + protocol-specific match.
-5. Separate expected / paper / realized accounting.
-6. Frozen forward predictions for L6 bootstrap calibration.
-7. Local dashboard at `http://127.0.0.1:8787`.
-8. TOP-10 opportunity watchlist.
-9. Incumbent/competition monitoring.
-10. Reward-aware search allocation.
-11. Champion feedback into persistent search.
-12. One-screen manual safety checklist.
-13. Post-tapeout reward + slot monitoring.
-14. Predicted-vs-realized learning, Brier/ECE/calibration curve/payback error.
-15. Primary KPI: **Realized Net USD / Capital / Day**.
-
-## Final verification
-
-Hybrid v7.0.0 final distribution:
-
-- `pytest`: **72 passed**
-- import smoke: **71 modules / 0 failures**
-- `compileall`: PASS
-- hybrid config validation: PASS
-- macOS shell syntax: PASS
-- wheel build/install/CLI smoke: PASS
-- extracted-distribution regression: **72 passed**
-- wheel SHA-256: `3e6b8c1cc1fb7aff5c66a0e4df21755c4364c3946a844c672e6bfb15bf6c57f1`
-- full source ZIP SHA-256: `21ea18dc958d7bdcb6034db2c3e61623bef03bb23b439ebe31443cd1e938d59e`
+Implemented targets include immutable manual packages, expiry/revalidation, manual tx recording, expected/paper/realized accounting, L6 forward calibration, local dashboard, TOP-10 watchlist, competition monitoring, reward-aware search, champion feedback, safety checklist, post-tapeout monitoring and the primary KPI **Realized Net USD / Capital / Day**.
 
 ## MacBook target
 
@@ -58,14 +48,23 @@ The intended local source directory is exactly:
 
 `/Users/Shared/WorkspaceBersama/opentrue.org (loading ke antigravity)/a.a.a.a.a.a`
 
-Private runtime/operator data belongs under:
+Private runtime/operator data belongs under `.runtime/` and must not be committed.
 
-`.../a.a.a.a.a.a/.runtime/`
+Use `INSTALL_FROM_ZIP.command` with the verified `tapeout_hybrid_v7.1_FINAL.zip`; it upgrades the target path while preserving `.runtime`, `.hybrid.env`, `.venv` and SQLite state, then starts and verifies localhost.
 
-Public GitHub contains safe operator documentation/templates only; use the verified source ZIP for the complete tested source tree. `.runtime`, `.hybrid.env`, SQLite state, logs, virtualenv and wallet/private-key material must never be committed.
+## Readiness states
+
+- `SETUP_REQUIRED`: dashboard is alive, but live settings are incomplete.
+- `LOCAL_READY`: local engine/bootstrap is healthy.
+- Live doctor must pass before live data is trusted.
+- `MONEY READINESS: MANUAL OPPORTUNITY READY` only appears when current verified conditions and opportunity gates qualify.
+
+No software can guarantee profit. Market price, liquidity, network weight and competitors can change. The system is designed to reject weak opportunities rather than promise returns.
 
 ## Live truth boundary
 
-The bundled/public adapter templates are fail-closed. Do not mark them verified until the exact TapeOut/BNB deployment task schema, addresses, ABI, preview semantics and market route are independently checked.
+The bundled adapter templates are fail-closed placeholders. Do not mark them verified until the exact TapeOut/BNB deployment task schema, addresses, ABI, preview semantics and market route are independently checked.
 
-L6 is also not pre-certified: it stays `PREDICTION_UNCERTIFIED` / `CALIBRATING` until real frozen recommendations and realized outcomes satisfy the configured global and recent-window statistical gates.
+The official TapeOut PoD page may itself be unavailable or unable to load chain deployment data at times; in that case the correct hybrid action is `SETUP_REQUIRED` / `WAIT`, not fabricated live data.
+
+L6 is not pre-certified: it stays `PREDICTION_UNCERTIFIED` / `CALIBRATING` until real frozen recommendations and realized outcomes satisfy the statistical gates.
