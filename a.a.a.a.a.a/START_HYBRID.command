@@ -5,7 +5,7 @@ TARGET_DEFAULT='/Users/Shared/WorkspaceBersama/opentrue.org (loading ke antigrav
 ROOT="${HYBRID_TARGET_ROOT:-$TARGET_DEFAULT}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
-echo "=== TapeOut Hybrid v7.9 bootstrap/start ==="
+echo "=== TapeOut Hybrid v8.2.1 bootstrap/start ==="
 echo "Source: $SCRIPT_DIR"
 echo "Target: $ROOT"
 
