@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+from pathlib import Path
+import json,sys,time
+sys.path.insert(0,str(Path(__file__).resolve().parent/"lib"))
+from tapeout_adapter_lib import (
+    MANIFEST,CONTRACTS,CPUS,SEL,require_chain,uint_call,words_call,address_call,
+    public_bnb_usd,parse_netlist,task_meta
+)
+
+def chain_snapshot(p):
+    tid=int(p["task_id"]); cost_f=float(p["design_cost"])
+    if not cost_f.is_integer() or cost_f<=0: raise RuntimeError("design_cost must be a positive integer C")
+    cost=int(cost_f); net=str(p.get("netlist_hex") or "")
+    counts=parse_netlist(net)
+    task=task_meta(tid)
+    if not task.get("full_domain_stateless"):
+        raise RuntimeError("task is outside audited full-domain combinational live scope")
+    cid,block,gas=require_chain()
+    mining=CONTRACTS["mining"]; lens=CONTRACTS["lens"]
+    tv=uint_call(mining,SEL["totalVerifWeight"])
+    tu=uint_call(mining,SEL["totalUnverWeight"])
+    emission_raw=uint_call(mining,SEL["dailyEmission"])
+    ubps=uint_call(mining,SEL["UNVERIFIED_BPS"])
+    if ubps<0 or ubps>10000: raise RuntimeError("invalid UNVERIFIED_BPS")
+    bnb_usd,bnb_source=public_bnb_usd()
+    processors=[]
+    for name,pin in CPUS.items():
+        addr=pin["address"]
+        mult=uint_call(mining,SEL["processorMultiplier"],["address"],[addr])
+        if int(mult)!=int(pin["multiplier"]):
+            raise RuntimeError(f"processor multiplier changed for {name}")
+        best=words_call(lens,SEL["bestSlot"],["uint32","address"],[tid,addr])
+        if len(best)<2: raise RuntimeError(f"bestSlot malformed for {name}")
+        holder_plus1=int(best[0]); incumbent=int(best[1]) if holder_plus1 else None
+        wins=incumbent is None or cost<int(incumbent)
+        bonus=uint_call(lens,SEL["bonusOf"],["uint32","uint256"],[tid,cost]) if wins else 0
+        weight=(counts["bstar"]+int(bonus))*int(mult)
+        if weight<=0: raise RuntimeError(f"non-positive preview weight for {name}")
+
+        trans=address_call(addr,SEL["transistors"])
+        mint_price=uint_call(trans,SEL["mintPrice"])
+        protocol_fee=uint_call(trans,SEL["protocolFee"])
+        cap=uint_call(trans,SEL["supplyCap"])
+        minted=uint_call(trans,SEL["minted"])
+        nand_id=uint_call(trans,SEL["NAND"])
+        latch_id=uint_call(trans,SEL["LATCH"])
+        if nand_id!=0 or latch_id!=1:
+            raise RuntimeError(f"unexpected transistor token IDs for {name}")
+        need=counts["nand"]+counts["latch"]
+        enough_primary=(minted+need)<=cap
+        nand_price=None; latch_price=None
+        if enough_primary:
+            if counts["nand"]:
+                nand_price=(mint_price+protocol_fee/counts["nand"])/1e18
+            else:
+                nand_price=mint_price/1e18
+            if counts["latch"]:
+                latch_price=(mint_price+protocol_fee/counts["latch"])/1e18
+            else:
+                latch_price=mint_price/1e18
+        processors.append({
+            "name":name,"address":addr,"multiplier":float(mult),
+            "incumbent_c":None if incumbent is None else float(incumbent),
+            "incumbent_owner":None,
+            "preview_eligible":True,
+            "preview_weight":float(weight),
+            "preview_reason":(
+                "AUDITED_PRE_TAPEOUT_FORMULA: H=(NAND+LATCH+bonus_if_strictly_optimal)*P; "
+                f"slot={'EMPTY' if incumbent is None else 'TAKEN'}; candidate_strictly_optimal={wins}; "
+                f"bonus={bonus}; primary_transistor_inventory={'OK' if enough_primary else 'SOLD_OUT'}"
+            ),
+            "nand_price_bnb":None if nand_price is None else float(nand_price),
+            "latch_price_bnb":None if latch_price is None else float(latch_price),
+        })
+    snap={
+        "chain_id":cid,"block_number":block,
+        "total_verified_weight":float(tv),"total_unverified_weight":float(tu),
+        "daily_emission_bem":float(emission_raw)/1e8,
+        "verified_pool_share":float(10000-ubps)/10000.0,
+        "unverified_pool_share":float(ubps)/10000.0,
+        "bnb_usd":float(bnb_usd),"gas_price_wei":gas,
+        "processors":processors,"fetched_at":time.time(),
+        "source":f"official TapeOut v8.1 deployment + BNB JSON-RPC + {bnb_source}",
+        "verified_source":True,
+    }
+    return snap
+
+def probe():
+    cid,block,gas=require_chain()
+    bnb_usd,bnb_source=public_bnb_usd()
+    mining=CONTRACTS["mining"]
+    ubps=uint_call(mining,SEL["UNVERIFIED_BPS"])
+    if ubps<0 or ubps>10000:
+        raise RuntimeError("invalid UNVERIFIED_BPS")
+    rows=[]
+    for name,pin in CPUS.items():
+        addr=pin["address"]
+        mult=uint_call(mining,SEL["processorMultiplier"],["address"],[addr])
+        if int(mult)!=int(pin["multiplier"]):
+            raise RuntimeError(f"processor multiplier changed for {name}")
+        trans=address_call(addr,SEL["transistors"])
+        mint_price=uint_call(trans,SEL["mintPrice"])
+        fee=uint_call(trans,SEL["protocolFee"])
+        cap=uint_call(trans,SEL["supplyCap"])
+        minted=uint_call(trans,SEL["minted"])
+        if uint_call(trans,SEL["NAND"])!=0 or uint_call(trans,SEL["LATCH"])!=1:
+            raise RuntimeError(f"unexpected transistor token IDs for {name}")
+        rows.append({"name":name,"address":addr,"multiplier":int(mult),
+                     "transistors":trans,"mint_price_wei":mint_price,
+                     "protocol_fee_wei":fee,"supply_cap":cap,"minted":minted})
+    return {
+      "chain_id":cid,"block_number":block,"gas_price_wei":gas,
+      "bnb_usd":float(bnb_usd),"source":f"official TapeOut v8.1 + BNB JSON-RPC + {bnb_source}",
+      "verified_source":True,"processors":rows,
+    }
+
+def main():
+    req=json.load(sys.stdin); action=req.get("action"); payload=req.get("payload") or {}
+    if action=="chain_snapshot":
+        print(json.dumps({"ok":True,"snapshot":chain_snapshot(payload)},separators=(",",":")))
+    elif action=="probe":
+        print(json.dumps({"ok":True,"probe":probe()},separators=(",",":")))
+    else:
+        raise RuntimeError("unsupported action")
+
+if __name__=="__main__":
+    try:
+        main()
+    except Exception as e:
+        print(json.dumps({"ok":False,"error":f"{type(e).__name__}: {e}"}))
