@@ -5,10 +5,11 @@ TARGET_DEFAULT='/Users/Shared/WorkspaceBersama/opentrue.org (loading ke antigrav
 ROOT="${HYBRID_TARGET_ROOT:-$TARGET_DEFAULT}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
-echo "=== TapeOut Hybrid v7.2 bootstrap/start ==="
+echo "=== TapeOut Hybrid v7.9 bootstrap/start ==="
 echo "Source: $SCRIPT_DIR"
 echo "Target: $ROOT"
 
+# The old installer assumed the target directory already existed.
 # v7.2 can be launched directly from Downloads/Desktop after extracting the ZIP.
 if [[ "$SCRIPT_DIR" != "$ROOT" ]]; then
   if [[ ! -f "$SCRIPT_DIR/pyproject.toml" || ! -d "$SCRIPT_DIR/src/tapeout_engine" ]]; then
@@ -21,6 +22,7 @@ if [[ "$SCRIPT_DIR" != "$ROOT" ]]; then
   mkdir -p "$ROOT"
 
   echo "Copying Hybrid source into target..."
+  # Preserve runtime/operator state across upgrades.
   rsync -a \
     --exclude '.runtime/' \
     --exclude '.venv/' \
@@ -37,16 +39,19 @@ fi
 
 cd "$ROOT"
 
-if [[ ! -f "$ROOT/.hybrid.env" ]]; then
-  cp "$ROOT/.hybrid.env.example" "$ROOT/.hybrid.env"
-  chmod 600 "$ROOT/.hybrid.env"
-  echo "Created .hybrid.env."
-fi
+chmod +x "$ROOT/macos/"*.sh 2>/dev/null || true
+"$ROOT/macos/migrate_env.sh"
 
 if [[ ! -x "$ROOT/.venv/bin/tapeout-hybrid" ]]; then
   echo "Hybrid runtime not installed yet; installing..."
   "$ROOT/macos/install_hybrid.sh"
 else
+  SOURCE_VERSION="$(grep -E '^version[[:space:]]*=' "$ROOT/pyproject.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+  INSTALLED_VERSION="$("$ROOT/.venv/bin/python" -c 'import importlib.metadata as m; print(m.version("tapeout-design-engine"))' 2>/dev/null || true)"
+  if [[ -n "$SOURCE_VERSION" && "$INSTALLED_VERSION" != "$SOURCE_VERSION" ]]; then
+    echo "Refreshing editable runtime metadata: ${INSTALLED_VERSION:-unknown} -> $SOURCE_VERSION"
+    "$ROOT/.venv/bin/pip" install -e "$ROOT"
+  fi
   echo "Existing runtime found; repairing services..."
   "$ROOT/macos/repair_hybrid.sh"
 fi
