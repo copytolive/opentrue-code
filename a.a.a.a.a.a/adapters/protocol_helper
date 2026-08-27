@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+from pathlib import Path
+import json,sys
+sys.path.insert(0,str(Path(__file__).resolve().parent/"lib"))
+from tapeout_adapter_lib import (
+    CHAIN_ID,CONTRACTS,CPUS,SEL,TAPED_OUT_TOPIC,calldata,encode_candidate,normalize_candidate,
+    parse_netlist,task_meta,processor_meta,decode_tapeout_calldata,normalize_address,
+    tx_data,hex_int,find_tapedout,miner_key,mining_record,claimable_bem,require_chain
+)
+
+def normalize_circuit(payload):
+    task=payload["task"]; circuit=payload["circuit"]
+    if int(task["n_inputs"])!=int(circuit["n_inputs"]):
+        raise RuntimeError("task/circuit input width mismatch")
+    c=normalize_candidate(circuit)
+    return {
+        "circuit":c.to_dict(),
+        "normalization":"TAIL_OUTPUT_WIRE_FORMAT",
+        "deployment_id":"tapeout-bnb-mainnet-v8.1-audited",
+    }
+
+def encode_netlist(payload):
+    task=payload["task"]; circuit=payload["circuit"]
+    if int(task["n_inputs"])!=int(circuit["n_inputs"]):
+        raise RuntimeError("task/circuit input width mismatch")
+    h=encode_candidate(circuit)
+    return {"netlist_hex":h,"deployment_id":"tapeout-bnb-mainnet-v8.1-audited"}
+
+def build_tapeout(payload):
+    opp=payload["opportunity"]; nl=str(payload["netlist_hex"])
+    counts=parse_netlist(nl)
+    task=task_meta(opp["task_id"])
+    if not task.get("full_domain_stateless"):
+        raise RuntimeError("task outside audited live scope")
+    proc=processor_meta(opp["processor"])
+    data=calldata(
+        SEL["tapeout"],["bytes","uint32","uint32"],
+        [nl,int(task["n_in"]),int(task["n_out"])]
+    )
+    tx={"to":proc["address"],"data":data,"value":"0x0","chainId":CHAIN_ID}
+    return {"transactions":[{
+        "purpose":"tapeout","tx":tx,
+        "audit":{
+            "abi":"tapeout(bytes,uint32,uint32)","selector":SEL["tapeout"],
+            "nand":counts["nand"],"latch":counts["latch"],
+            "wallet_boundary":"MANUAL_ONLY",
+        }
+    }]}
+
+def inspect_manual(payload):
+    package=payload["package"]; tx=payload["transaction"]; receipt=payload["receipt"]
+    if hex_int(receipt.get("status"))!=1: raise RuntimeError("receipt status is not success")
+    proc=processor_meta(package["processor"])
+    if normalize_address(tx.get("to"))!=normalize_address(proc["address"]):
+        raise RuntimeError("confirmed transaction target does not match frozen processor")
+    if hex_int(tx.get("value",0))!=0: raise RuntimeError("tapeout transaction must have zero native value")
+    dec=decode_tapeout_calldata(tx_data(tx))
+    frozen=str(package["circuit"]["netlist_hex"]).lower()
+    if dec["netlist_hex"].lower()!=frozen:
+        raise RuntimeError("confirmed tapeout netlist differs from frozen package")
+    task=task_meta(package["task_id"])
+    if dec["n_in"]!=int(task["n_in"]) or dec["n_out"]!=int(task["n_out"]):
+        raise RuntimeError("confirmed tapeout I/O width differs from audited task")
+    counts=parse_netlist(frozen)
+    if int(package["circuit"].get("nand") or 0)!=counts["nand"] or int(package["circuit"].get("latch") or 0)!=counts["latch"]:
+        raise RuntimeError("frozen circuit burn counts differ from encoded netlist")
+    snap=package["chain"]["snapshot"]
+    ps=next((x for x in snap.get("processors",[]) if x.get("name")==package["processor"]),None)
+    if ps is None or ps.get("nand_price_bnb") is None or ps.get("latch_price_bnb") is None:
+        raise RuntimeError("frozen material quote unavailable")
+    material_bnb=counts["nand"]*float(ps["nand_price_bnb"])+counts["latch"]*float(ps["latch_price_bnb"])
+    nongas=material_bnb*float(snap["bnb_usd"])
+    event=find_tapedout([receipt],proc["address"])
+    if event is None:
+        raise RuntimeError("successful receipt lacks audited TapedOut event")
+    return {"inspection":{
+        "matched":True,"purpose":"tapeout",
+        "actual_non_gas_cost_usd":float(nongas),
+        "cost_basis":"frozen_primary_transistor_quote_including_protocol_fee",
+        "task_id":str(package["task_id"]),"processor":package["processor"],
+        "circuit_fingerprint":package["circuit"]["fingerprint"],
+        "circuit_id":str(event["circuit_id"]),"author":event["author"],
+    }}
+
+def read_position(payload):
+    package=payload.get("package") or {}
+    txs=payload.get("manual_transactions") or []
+    receipts=[]
+    for row in txs:
+        r=row.get("receipt") if isinstance(row,dict) else None
+        if isinstance(r,dict): receipts.append(r)
+    processor=package.get("processor")
+    expected=None
+    if processor:
+        expected=processor_meta(processor)["address"]
+    event=find_tapedout(receipts,expected)
+    if event is None:
+        return {"position":{"status":"TAPEOUT_EVENT_NOT_FOUND","task_id":str(package.get("task_id",""))}}
+    return {"position":{
+        "status":"CIRCUIT_CONFIRMED","circuits":event["processor"],
+        "circuit_id":int(event["circuit_id"]),"author":event["author"],
+        "gate_count":event["gate_count"],"state_count":event["n_state"],
+        "task_id":str(package.get("task_id","")),"processor":processor,
+    }}
+
+def read_rewards(payload):
+    pos=payload
+    if not pos.get("circuits") or pos.get("circuit_id") is None:
+        return {"rewards":{"status":"NO_CONFIRMED_CIRCUIT","claimable_bem":0.0}}
+    require_chain()
+    key=miner_key(pos["circuits"],int(pos["circuit_id"]))
+    rec=mining_record(key)
+    if int(rec["status"])!=1:
+        return {"rewards":{
+            "status":"CIRCUIT_NOT_CURRENTLY_MINING","claimable_bem":0.0,
+            "miner_key":key,"mining":rec,
+            "next_action":"Start mining manually through the official TapeOut PoD wallet flow if desired."
+        }}
+    amount=claimable_bem(key)
+    return {"rewards":{
+        "status":"MINING","claimable_bem":float(amount),"miner_key":key,"mining":rec
+    }}
+
+def probe():
+    cid,block,gas=require_chain()
+    smoke=__import__("tapeout_adapter_lib").MANIFEST["smoke_test"]
+    nl=smoke["reference_netlist"]
+    counts=parse_netlist(nl)
+    data=calldata(SEL["tapeout"],["bytes","uint32","uint32"],[nl,smoke["n_in"],smoke["n_out"]])
+    dec=decode_tapeout_calldata(data)
+    if dec!={"netlist_hex":nl,"n_in":smoke["n_in"],"n_out":smoke["n_out"]}:
+        raise RuntimeError("audited tapeout codec self-check failed")
+    if counts["nand"]!=smoke["nand"] or counts["latch"]!=smoke["latch"]:
+        raise RuntimeError("audited reference netlist burn-count self-check failed")
+    return {
+      "chain_id":cid,"block_number":block,"tapeout_selector":SEL["tapeout"],
+      "processor":smoke["processor"],"processor_address":processor_meta(smoke["processor"])["address"],
+      "wallet_boundary":"MANUAL_ONLY","verified_source":True,
+      "source":"TapeOut v8.1 official schema + on-chain bytecode verification",
+    }
+
+def main():
+    req=json.load(sys.stdin); action=req.get("action"); payload=req.get("payload") or {}
+    if action=="normalize_circuit": result=normalize_circuit(payload)
+    elif action=="encode_netlist": result=encode_netlist(payload)
+    elif action=="build_tapeout": result=build_tapeout(payload)
+    elif action=="inspect_manual_transaction": result=inspect_manual(payload)
+    elif action=="read_position": result=read_position(payload)
+    elif action=="read_rewards": result=read_rewards(payload)
+    elif action=="probe": result={"probe":probe()}
+    else: raise RuntimeError("unsupported action")
+    print(json.dumps({"ok":True,**result},ensure_ascii=False,separators=(",",":")))
+
+if __name__=="__main__":
+    try:
+        main()
+    except Exception as e:
+        print(json.dumps({"ok":False,"error":f"{type(e).__name__}: {e}"},ensure_ascii=False))
