@@ -1,0 +1,33 @@
+{
+  "version": "8.2.0",
+  "date": "2026-08-27",
+  "evidence": {
+    "official_tasks": 267,
+    "official_comb_tasks": 209,
+    "official_sequential_tasks": 58,
+    "supported_full_domain_tasks": 125,
+    "reference_implementations": 267,
+    "vector_sets": 267,
+    "official_js_assets": 40,
+    "abi_functions_recovered": 141,
+    "selectors_keccak_verified": 20,
+    "event_topics_keccak_verified": 1
+  },
+  "tests": {
+    "pytest_passed": 112,
+    "compileall": "PASS",
+    "shell_syntax": "13/13 PASS",
+    "manifest_replay": "267/267 PASS",
+    "supported_reference_exhaustive_verify": "125/125 PASS",
+    "multioutput_tail_property_cases": 399
+  },
+  "adapters": {
+    "task_collector": "AUDITED_FAIL_CLOSED_LIVE",
+    "chain_collector": "AUDITED_FAIL_CLOSED_LIVE",
+    "protocol_helper": "AUDITED_FAIL_CLOSED_MANUAL_WALLET"
+  },
+  "wallet_boundary": "MANUAL_ONLY",
+  "autonomous_signing": false,
+  "autonomous_broadcast": false,
+  "final_live_doctor_required_on_mac": true
+}
