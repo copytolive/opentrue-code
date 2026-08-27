@@ -5,12 +5,10 @@ TARGET_DEFAULT='/Users/Shared/WorkspaceBersama/opentrue.org (loading ke antigrav
 ROOT="${HYBRID_TARGET_ROOT:-$TARGET_DEFAULT}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
-echo "=== TapeOut Hybrid v8.2.1 bootstrap/start ==="
+echo "=== TapeOut Hybrid v8.2.6 bootstrap/start ==="
 echo "Source: $SCRIPT_DIR"
 echo "Target: $ROOT"
 
-# The old installer assumed the target directory already existed.
-# v7.2 can be launched directly from Downloads/Desktop after extracting the ZIP.
 if [[ "$SCRIPT_DIR" != "$ROOT" ]]; then
   if [[ ! -f "$SCRIPT_DIR/pyproject.toml" || ! -d "$SCRIPT_DIR/src/tapeout_engine" ]]; then
     echo "ERROR: this START_HYBRID.command is not inside an extracted Hybrid source folder." >&2
@@ -22,7 +20,6 @@ if [[ "$SCRIPT_DIR" != "$ROOT" ]]; then
   mkdir -p "$ROOT"
 
   echo "Copying Hybrid source into target..."
-  # Preserve runtime/operator state across upgrades.
   rsync -a \
     --exclude '.runtime/' \
     --exclude '.venv/' \
