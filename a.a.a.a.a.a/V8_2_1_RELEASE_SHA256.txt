@@ -1,0 +1,14 @@
+TapeOut Hybrid v8.2.1 final release checksums
+Date: 2026-08-27
+
+ZIP SHA256:
+e1c54181f07a9f75759350cd7ccbfb0932faa21512bb32cf0d5bfa725d64792d  tapeout_hybrid_v8_2_1_LIVE_ADAPTERS_FINAL.zip
+
+Verifier SHA256:
+67c1d4208d06a56122a59c7faeca8384f00d209dce9e78c134eccf153af35f39  INSTALL_V821_FINAL_VERIFY.command
+
+All-in-one SHA256:
+39d742ddbd45e94bb29a59875fe95e940e2827d8314d2a7aa22de1a865c5c450  TapeOut_V821_FINAL_ALL_IN_ONE.command
+
+Regression: 114/114 pytest PASS; compileall PASS; 14/14 shell syntax PASS.
+Wallet boundary: MANUAL_ONLY.
