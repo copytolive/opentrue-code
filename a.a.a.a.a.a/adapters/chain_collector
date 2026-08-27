@@ -25,14 +25,35 @@ def chain_snapshot(p):
     if ubps<0 or ubps>10000: raise RuntimeError("invalid UNVERIFIED_BPS")
     bnb_usd,bnb_source=public_bnb_usd()
     processors=[]
+    multiplier_drift=[]
+    inactive_processors=[]
     for name,pin in CPUS.items():
         addr=pin["address"]
-        mult=uint_call(mining,SEL["processorMultiplier"],["address"],[addr])
-        if int(mult)!=int(pin["multiplier"]):
-            raise RuntimeError(f"processor multiplier changed for {name}")
+        # The official deployment JSON is a discovery/configuration pin. The
+        # mining contract is authoritative for the *current* processor
+        # multiplier. The official frontend itself only requires
+        # processorMultiplier(cpu) != 0 before commit/tapeout, so a positive
+        # live multiplier drift must not take the whole engine offline.
+        pinned_mult=int(pin["multiplier"])
+        mult=int(uint_call(mining,SEL["processorMultiplier"],["address"],[addr]))
+        if mult < 0 or mult > 0xFFFFFFFF:
+            raise RuntimeError(f"invalid processor multiplier for {name}: {mult}")
+        if mult == 0:
+            inactive_processors.append({
+                "name":name,"address":addr,"pinned_multiplier":pinned_mult,
+                "live_multiplier":0,"reason":"processorMultiplier(address)=0",
+            })
+            continue
+        if mult != pinned_mult:
+            multiplier_drift.append({
+                "name":name,"address":addr,"pinned_multiplier":pinned_mult,
+                "live_multiplier":mult,
+            })
         best=words_call(lens,SEL["bestSlot"],["uint32","address"],[tid,addr])
         if len(best)<2: raise RuntimeError(f"bestSlot malformed for {name}")
         holder_plus1=int(best[0]); incumbent=int(best[1]) if holder_plus1 else None
+        # Ties are never promoted. A strictly lower C (or empty slot) is the
+        # only candidate state to which the audited design bonus is applied.
         wins=incumbent is None or cost<int(incumbent)
         bonus=uint_call(lens,SEL["bonusOf"],["uint32","uint256"],[tid,cost]) if wins else 0
         weight=(counts["bstar"]+int(bonus))*int(mult)
@@ -51,6 +72,9 @@ def chain_snapshot(p):
         enough_primary=(minted+need)<=cap
         nand_price=None; latch_price=None
         if enough_primary:
+            # Official UI pays mintPrice*qty + protocolFee separately for each
+            # NAND/LATCH mint transaction. Allocate that fixed fee into the
+            # per-unit price so the core's material-cost sum is exact.
             if counts["nand"]:
                 nand_price=(mint_price+protocol_fee/counts["nand"])/1e18
             else:
@@ -61,6 +85,8 @@ def chain_snapshot(p):
                 latch_price=mint_price/1e18
         processors.append({
             "name":name,"address":addr,"multiplier":float(mult),
+            "pinned_multiplier":pinned_mult,
+            "multiplier_changed":bool(mult!=pinned_mult),
             "incumbent_c":None if incumbent is None else float(incumbent),
             "incumbent_owner":None,
             "preview_eligible":True,
@@ -73,6 +99,8 @@ def chain_snapshot(p):
             "nand_price_bnb":None if nand_price is None else float(nand_price),
             "latch_price_bnb":None if latch_price is None else float(latch_price),
         })
+    if not processors:
+        raise RuntimeError("no audited processor currently participates in mining")
     snap={
         "chain_id":cid,"block_number":block,
         "total_verified_weight":float(tv),"total_unverified_weight":float(tu),
@@ -80,8 +108,11 @@ def chain_snapshot(p):
         "verified_pool_share":float(10000-ubps)/10000.0,
         "unverified_pool_share":float(ubps)/10000.0,
         "bnb_usd":float(bnb_usd),"gas_price_wei":gas,
-        "processors":processors,"fetched_at":time.time(),
-        "source":f"official TapeOut v8.1 deployment + BNB JSON-RPC + {bnb_source}",
+        "processors":processors,
+        "inactive_processors":inactive_processors,
+        "processor_multiplier_drift":multiplier_drift,
+        "fetched_at":time.time(),
+        "source":f"official TapeOut v8.1 deployment discovery pins + live BNB mining state + {bnb_source}",
         "verified_source":True,
     }
     return snap
@@ -94,25 +125,44 @@ def probe():
     if ubps<0 or ubps>10000:
         raise RuntimeError("invalid UNVERIFIED_BPS")
     rows=[]
+    active=0
+    drift=[]
     for name,pin in CPUS.items():
         addr=pin["address"]
-        mult=uint_call(mining,SEL["processorMultiplier"],["address"],[addr])
-        if int(mult)!=int(pin["multiplier"]):
-            raise RuntimeError(f"processor multiplier changed for {name}")
+        pinned_mult=int(pin["multiplier"])
+        mult=int(uint_call(mining,SEL["processorMultiplier"],["address"],[addr]))
+        if mult < 0 or mult > 0xFFFFFFFF:
+            raise RuntimeError(f"invalid processor multiplier for {name}: {mult}")
+        if mult>0:
+            active+=1
+        if mult!=pinned_mult:
+            drift.append({"name":name,"address":addr,
+                          "pinned_multiplier":pinned_mult,"live_multiplier":mult})
         trans=address_call(addr,SEL["transistors"])
+        # Prove the audited material ABI is still callable and token IDs remain fixed.
         mint_price=uint_call(trans,SEL["mintPrice"])
         fee=uint_call(trans,SEL["protocolFee"])
         cap=uint_call(trans,SEL["supplyCap"])
         minted=uint_call(trans,SEL["minted"])
         if uint_call(trans,SEL["NAND"])!=0 or uint_call(trans,SEL["LATCH"])!=1:
             raise RuntimeError(f"unexpected transistor token IDs for {name}")
-        rows.append({"name":name,"address":addr,"multiplier":int(mult),
-                     "transistors":trans,"mint_price_wei":mint_price,
-                     "protocol_fee_wei":fee,"supply_cap":cap,"minted":minted})
+        rows.append({
+            "name":name,"address":addr,"multiplier":mult,
+            "pinned_multiplier":pinned_mult,
+            "multiplier_changed":bool(mult!=pinned_mult),
+            "active_for_mining":bool(mult>0),
+            "transistors":trans,"mint_price_wei":mint_price,
+            "protocol_fee_wei":fee,"supply_cap":cap,"minted":minted,
+        })
+    if active<=0:
+        raise RuntimeError("no audited processor currently participates in mining")
     return {
       "chain_id":cid,"block_number":block,"gas_price_wei":gas,
-      "bnb_usd":float(bnb_usd),"source":f"official TapeOut v8.1 + BNB JSON-RPC + {bnb_source}",
+      "bnb_usd":float(bnb_usd),
+      "source":f"official TapeOut v8.1 deployment discovery pins + live BNB mining state + {bnb_source}",
       "verified_source":True,"processors":rows,
+      "active_processor_count":active,
+      "processor_multiplier_drift":drift,
     }
 
 def main():
