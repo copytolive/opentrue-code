@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+import json,sys,time
+sys.path.insert(0,str(Path(__file__).resolve().parent/"lib"))
+from tapeout_adapter_lib import MANIFEST,TASKS,canonical_hash,http_json,bits_lsb_bytes
+
+EXPECTED_TASK_FIELDS={
+    "task_id":"taskId","src_id":"srcId","name":"name","kind":"kind",
+    "cycles":"cycles","n_in":"nIn","n_out":"nOut","ref_area":"refArea",
+    "ref_cost":"refCost","ref_gates":"refGates","ref_depth":"refDepth",
+}
+
+def main():
+    req=json.load(sys.stdin)
+    if req.get("action")!="active_tasks":
+        raise RuntimeError("unsupported action")
+    urls=MANIFEST["official_urls"]
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        flive=ex.submit(http_json,urls["mainnet"],35)
+        fvec=ex.submit(http_json,urls["vectors"],60)
+        fref=ex.submit(http_json,urls["refimpl"],60)
+        live=flive.result(); vectors=fvec.result(); refs=fref.result()
+    if int(live.get("chainId",0))!=int(MANIFEST["chain_id"]):
+        raise RuntimeError("official deployment chainId changed since v8.1 audit")
+    for key,address in MANIFEST["contracts"].items():
+        if str(live.get("contracts",{}).get(key,"")).lower()!=str(address).lower():
+            raise RuntimeError(f"official {key} deployment changed since v8.1 audit")
+    for name,pinned in MANIFEST["cpus"].items():
+        cur=live.get("cpus",{}).get(name)
+        if not isinstance(cur,dict):
+            raise RuntimeError(f"audited processor {name} missing from official deployment")
+        if str(cur.get("address","")).lower()!=str(pinned["address"]).lower():
+            raise RuntimeError(f"processor {name} address changed since v8.1 audit")
+        if int(cur.get("multiplier",-1))!=int(pinned["multiplier"]):
+            raise RuntimeError(f"processor {name} multiplier changed since v8.1 audit")
+
+    live_tasks={str(x["taskId"]):x for x in live.get("tasks",[]) if isinstance(x,dict)}
+    out=[]; mismatched=[]
+    for tid,pin in TASKS.items():
+        if not pin.get("full_domain_stateless"):
+            continue
+        cur=live_tasks.get(tid); v=vectors.get(tid); r=refs.get(tid)
+        if not isinstance(cur,dict) or not isinstance(v,dict) or not isinstance(r,dict):
+            mismatched.append(tid); continue
+        good=True
+        for mk,lk in EXPECTED_TASK_FIELDS.items():
+            expected=pin[mk]
+            actual=cur.get(lk)
+            if mk in {"ref_cost"}:
+                if int(actual)!=int(expected): good=False; break
+            elif actual!=expected:
+                good=False; break
+        if canonical_hash(v)!=pin["vector_hash"] or canonical_hash(r)!=pin["ref_hash"]:
+            good=False
+        if not good:
+            mismatched.append(tid); continue
+        seen={}
+        for row in v.get("vectors",[]):
+            inp=tuple(bits_lsb_bytes(row["input"],pin["n_in"]))
+            outs=tuple(bits_lsb_bytes(row["out"],pin["n_out"]))
+            old=seen.get(inp)
+            if old is not None and old!=outs:
+                raise RuntimeError(f"official vectors conflict for task {tid}")
+            seen[inp]=outs
+        if len(seen)!=(1<<int(pin["n_in"])):
+            raise RuntimeError(f"task {tid} no longer covers full input domain")
+        rows=[{"inputs":list(k),"outputs":list(val)} for k,val in sorted(seen.items())]
+        out.append({
+            "task_id":tid,"status":"ACTIVE","deadline":None,
+            "incumbent_by_processor":{},
+            "mining":{
+                "source_task_id":pin["src_id"],"kind":"comb","cycles":pin["cycles"],
+                "coverage":"FULL_DOMAIN_AUDITED","audit":"TapeOut v8.1",
+                "unsupported_sequential_tasks":MANIFEST["supported_scope"]["sequential_tasks_excluded"],
+            },
+            "spec":{
+                "name":pin["name"],"type":"vectors",
+                "n_inputs":pin["n_in"],"n_outputs":pin["n_out"],"bit_order":"lsb",
+                "k_task":pin["ref_bstar"],"reference_cost":pin["ref_cost"],
+                "vectors":rows,
+            }
+        })
+    minimum=int(MANIFEST["supported_scope"]["full_domain_comb_tasks"])
+    if len(out)!=minimum:
+        raise RuntimeError(
+            f"audited full-domain task set changed: expected {minimum}, verified {len(out)}; "
+            f"mismatched={mismatched[:12]}"
+        )
+    snap={
+        "fetched_at":time.time(),
+        "source":"official tapeout.net pod-mainnet + pod-vectors-all + pod-refimpl; v8.1-pinned",
+        "verified_source":True,
+        "tasks":out,
+        "audit":{
+            "version":"8.2-live-adapters","eligible_tasks":len(out),
+            "all_comb_tasks":MANIFEST["supported_scope"]["all_comb_tasks"],
+            "sequential_excluded":MANIFEST["supported_scope"]["sequential_tasks_excluded"],
+        }
+    }
+    print(json.dumps({"ok":True,"snapshot":snap},ensure_ascii=False,separators=(",",":")))
+
+if __name__=="__main__":
+    try:
+        main()
+    except Exception as e:
+        print(json.dumps({"ok":False,"error":f"{type(e).__name__}: {e}"},ensure_ascii=False))
