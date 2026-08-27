@@ -1,0 +1,12 @@
+TapeOut Hybrid v8.2.5 final release checksums
+
+package_sha256  43013ecd96b58af6ef763f21c3ba918ba3c0efc5eb197563d1a2cdc3b93ffcdd  tapeout_hybrid_v8_2_5_RPC_EFFICIENT_FINAL.zip
+verifier_sha256 8467ea84376926c956b80dfe6f23a19b5369119baf801b3435c6b5fbc0c79e17  INSTALL_V825_FINAL_VERIFY.command
+all_in_one_sha256 b3b1510fc5f2de6733d15a377093be0020d94a5e6165011de0b093a17646e910  TapeOut_V825_FINAL_ALL_IN_ONE.command
+patch_sha256 1f9af4051bd500b565f6bc912d3b3fb3cc7bbfd9e9427755eacd6c5360c88ab9  V8_2_5_PATCH.diff
+
+Final extracted-package gates:
+127/127 pytest PASS
+compileall PASS
+14/14 shell/command syntax PASS
+wallet boundary MANUAL_ONLY
