@@ -31,13 +31,18 @@ async function refresh(){
  <div class="card"><b>PREDICTION MAE</b><h2>${k.prediction_mae_usd==null?"—":money(k.prediction_mae_usd)}</h2></div></div>`;
  if(boot.status==="SETUP_REQUIRED"){
    html+=`<div class="card"><h2 class="bad">SETUP_REQUIRED</h2>
-   <p>Dashboard hidup, tetapi engine live belum siap. Ini lebih baik daripada service mati.</p>
+   <p>Dashboard/runtime lokal hidup. Live TapeOut belum siap sampai semua adapter terverifikasi.</p>
    <button onclick="doctor()">RUN DOCTOR</button>
+   <button onclick="collectEvidence()">COLLECT PUBLIC EVIDENCE</button>
+   <a href="/api/evidence/evidence.json" download style="margin-left:8px;color:#9bd">DOWNLOAD EVIDENCE JSON</a>
+   <a href="/api/evidence/frontend-clues.json" download style="margin-left:8px;color:#9bd">DOWNLOAD FRONTEND CLUES JSON</a>
+   <a href="/api/evidence/protocol-candidates.json" download style="margin-left:8px;color:#9bd">DOWNLOAD PROTOCOL CANDIDATES</a>
    <pre>${esc((boot.blockers||[]).join("\n"))}</pre></div>`;
  }else if(boot.status){
    html+=`<div class="card"><h2 class="good">${esc(boot.status)}</h2>
    <p>Local app/bootstrap passed. Live readiness: <b>${esc(boot.live_status||"NOT_CHECKED")}</b>.</p>
-   <button onclick="doctor()">RUN LIVE DOCTOR</button></div>`;
+   <button onclick="doctor()">RUN LIVE DOCTOR</button>
+   <button onclick="collectEvidence()">COLLECT PUBLIC EVIDENCE</button></div>`;
  }
  html+=`<div class="card"><h2>BEST OPPORTUNITY NOW</h2>`;
  if(b.task_id){html+=`<div class="grid"><div>Task<br><b>#${esc(b.task_id)} ${esc(b.task_name)}</b></div><div>Processor<br><b>${esc(b.processor)}</b></div>
@@ -61,6 +66,16 @@ async function refresh(){
  document.getElementById("app").innerHTML=html;
 }
 async function doctor(){try{alert(JSON.stringify(await api("/api/doctor"),null,2));await refresh()}catch(e){alert(e)}}
+async function collectEvidence(){try{
+ const r=await api("/api/collect-evidence","POST");
+ const state=r.ok?"EVIDENCE READY":"PARTIAL EVIDENCE READY";
+ const ready=r.files_ready?"YES":"NO";
+ alert(state+"\nFiles downloadable: "+ready+
+       (r.timed_out?"\nCollector hit time limit; partial JSON was preserved.":"")+
+       "\n\n"+(r.stdout||"").slice(-2500)+
+       "\n"+(r.stderr||"").slice(-1500));
+ await refresh()
+}catch(e){alert("Evidence collection failed: "+e)}}
 async function recheck(id){try{alert(JSON.stringify(await api("/api/recheck/"+id,"POST"),null,2));await refresh()}catch(e){alert(e)}}
 async function recordTx(id){try{const v=document.getElementById("tx-"+id).value;alert(JSON.stringify(await api("/api/record-tx/"+id,"POST",{tx_hash:v}),null,2));await refresh()}catch(e){alert(e)}}
 async function realize(id){try{const bem=Number(document.getElementById("bem-"+id).value),usd=Number(document.getElementById("usd-"+id).value),sale=document.getElementById("sale-"+id).value||null;alert(JSON.stringify(await api("/api/record-realized/"+id,"POST",{realized_bem:bem,realized_usd:usd,sale_tx_hash:sale}),null,2));await refresh()}catch(e){alert(e)}}
@@ -76,6 +91,13 @@ def serve(controller,host:str="127.0.0.1",port:int=8787):
         def _body(self):
             n=int(self.headers.get("Content-Length","0") or 0)
             return json.loads(self.rfile.read(n)) if n else {}
+        def _bytes(self,status,raw,content_type="application/octet-stream",filename=None):
+            self.send_response(status)
+            self.send_header("Content-Type",content_type)
+            self.send_header("Content-Length",str(len(raw)))
+            if filename:
+                self.send_header("Content-Disposition",f'attachment; filename="{filename}"')
+            self.end_headers(); self.wfile.write(raw)
         def do_GET(self):
             path=urlparse(self.path).path
             if path=="/":
@@ -87,6 +109,14 @@ def serve(controller,host:str="127.0.0.1",port:int=8787):
                     self._json(200,result)
                 except Exception as e:
                     self._json(500,{"ready":False,"status":"SETUP_REQUIRED","error":repr(e)})
+                return
+            if path.startswith("/api/evidence/"):
+                try:
+                    name=path.rsplit("/",1)[-1]
+                    raw=controller.evidence_file(name)
+                    self._bytes(200,raw,"application/json",name)
+                except Exception as e:
+                    self._json(404,{"error":repr(e)})
                 return
             if path.startswith("/api/package/"):
                 try:
@@ -102,6 +132,8 @@ def serve(controller,host:str="127.0.0.1",port:int=8787):
             path=urlparse(self.path).path
             try:
                 if path=="/api/run-cycle": self._json(200,controller.run_cycle());return
+                if path=="/api/collect-evidence":
+                    self._json(200,controller.collect_public_evidence());return
                 if path=="/api/poll-monitoring": self._json(200,controller.poll_monitoring());return
                 if path.startswith("/api/recheck/"): self._json(200,controller.recheck(path.rsplit("/",1)[-1]));return
                 if path.startswith("/api/record-tx/"):

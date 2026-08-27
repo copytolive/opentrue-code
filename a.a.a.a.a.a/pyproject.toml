@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tapeout-design-engine"
+version = "7.9.0"
+description = "TapeOut Hybrid production engine: autonomous search/proof/economics with manual wallet execution, realized accounting and calibration."
+requires-python = ">=3.10"
+dependencies = ["sympy>=1.12"]
+
+[project.optional-dependencies]
+smt = ["z3-solver>=4.13"]
+execute = ["web3>=7.0"]
+full = ["z3-solver>=4.13", "web3>=7.0"]
+
+[project.scripts]
+tapeout-search = "tapeout_engine.cli:main"
+tapeout-24x7 = "tapeout_engine.daemon:main"
+tapeout-health = "tapeout_engine.health:main"
+tapeout-progress-health = "tapeout_engine.progress_health:main"
+tapeout-shard = "tapeout_engine.sharding:main"
+tapeout-final = "tapeout_engine.maturity_cli:main"
+tapeout-v5 = "tapeout_engine.maturity_cli:main"
+tapeout-maturity = "tapeout_engine.maturity_cli:main"
+tapeout-hybrid = "tapeout_engine.hybrid_cli:main"
+tapeout-scale = "tapeout_engine.scale_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
