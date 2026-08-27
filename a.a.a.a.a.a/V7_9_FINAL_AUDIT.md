@@ -18,9 +18,11 @@ v7.9 hardens the v7.8 evidence path before any live TapeOut adapter is enabled.
 
 ## Verification
 - Baseline v7.8 ZIP SHA-256 matched the handoff: `8220419590b8d902530f8d5c0eb721a10c7aa8ee57e711bde0151cc007f351c2`.
+- Final v7.9 ZIP SHA-256: `66b321bf88d273370dd32922a2bfb02a8213171ce0d724197f52538c2675fad9`.
 - v7.9 regression suite: **102 passed**.
 - `compileall`: **PASS**.
 - macOS shell / `.command` syntax validation: **PASS**.
+- Existing editable runtime is refreshed automatically when source package version changes.
 - Credential-pattern scan: no local `.env`, private key, seed phrase, or obvious embedded API key found in the distribution tree.
 
 ## Live-readiness rule
