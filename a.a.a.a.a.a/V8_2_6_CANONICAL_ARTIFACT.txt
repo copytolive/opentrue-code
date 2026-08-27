@@ -1,0 +1,6 @@
+tapeout_hybrid_v8_2_6_PROVIDER_COMPATIBLE_FINAL.zip
+SHA256 c5a2ac2bca0ebefbfd7ab476c12eb846d9b9cf0bf8c18eec676c787cefe1fad7
+130/130 tests PASS
+compileall PASS
+14/14 shell syntax PASS
+wallet MANUAL_ONLY
