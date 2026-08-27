@@ -1,0 +1,1 @@
+The tested v8.2.6 ZIP and recovery patch are canonical. Full byte-for-byte source parity on this GitHub branch is intentionally deferred until the whole helper/core tree can be transported atomically; do not treat partial connector commits as the deployment artifact. The branch must remain unmerged to main.
