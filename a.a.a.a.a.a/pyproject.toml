@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tapeout-design-engine"
-version = "8.2.0"
+version = "8.2.1"
 description = "TapeOut Hybrid production engine: autonomous search/proof/economics with manual wallet execution, realized accounting and calibration."
 requires-python = ">=3.10"
 dependencies = ["sympy>=1.12"]
