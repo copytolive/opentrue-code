@@ -1,0 +1,54 @@
+{
+  "name": "opentrue-code-desktop",
+  "version": "0.3.0",
+  "description": "OpenTrue Code desktop engine for macOS and Windows",
+  "main": "main.cjs",
+  "author": "copytolive",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer/app.js",
+    "dist:mac-arm64": "electron-builder --mac --arm64",
+    "dist:mac-x64": "electron-builder --mac --x64",
+    "dist:win-x64": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "37.2.6",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.opentrue.code",
+    "productName": "OpenTrue Code",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {"from": "../engine", "to": "runtime/engine"},
+      {"from": "../agent-runtime", "to": "runtime/agent-runtime"},
+      {"from": "../local-bridge", "to": "runtime/local-bridge"}
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"],
+      "artifactName": "OpenTrue-Code-${version}-mac-${arch}.${ext}",
+      "identity": null
+    },
+    "win": {
+      "target": ["nsis", "zip"],
+      "artifactName": "OpenTrue-Code-${version}-windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
