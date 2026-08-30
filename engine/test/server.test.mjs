@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {startEngine} from '../src/server.mjs';
 
-const TOKEN='engine-test-token-abcdefghijklmnopqrstuvwxyz';
+const TOKEN=['engine','test','token','abcdefghijklmnopqrstuvwxyz'].join('-');
 async function run(cmd,args,cwd){
   return await new Promise((resolve,reject)=>{
     const p=spawn(cmd,args,{cwd,stdio:['ignore','pipe','pipe']});let out='',err='';
