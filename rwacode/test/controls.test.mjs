@@ -56,7 +56,7 @@ test('workspace file changes are watched and refreshed without manual reload', (
   assert.match(renderer, /loadDirectory\(state\.currentDir, true\)/);
 });
 
-test('selective AI bridge sends only the chosen file and requires review before write-back', () => {
+test('selective AI bridge shares one chosen file and requires explicit review before write-back', () => {
   assert.match(html, /data-action="ai-send"/);
   assert.match(html, /data-action="ai-import"/);
   assert.match(html, /id="proposalPanel"/);
@@ -64,11 +64,21 @@ test('selective AI bridge sends only the chosen file and requires review before 
   assert.match(renderer, /api\.ai\.readReply\(\)/);
   assert.match(renderer, /window\.confirm\(`Replace \$\{target\}/);
   assert.match(renderer, /api\.files\.write\(target, content\)/);
+  assert.match(menu, /editorSendAiButton/);
+  assert.match(menu, /editorImportAiButton/);
   assert.match(aiBridge, /MAX_AI_CONTEXT_BYTES = 256 \* 1024/);
   assert.match(aiBridge, /chatgpt\.com/);
   assert.match(aiBridge, /claude\.ai/);
   assert.match(aiBridge, /gemini\.google\.com/);
   assert.match(aiBridge, /Security boundary: you are receiving only this explicitly selected file/);
+  assert.match(aiBridge, /submitted:false/);
+  assert.doesNotMatch(aiBridge, /send\.click\(\)/);
+});
+
+test('AI reply import requires exactly one fenced replacement block', () => {
+  assert.match(aiBridge, /function extractSingleReplacement/);
+  assert.match(aiBridge, /blocks\.length !== 1/);
+  assert.match(aiBridge, /requires exactly one fenced replacement code block/);
 });
 
 test('preview initial about:blank state cannot masquerade as live', () => {
