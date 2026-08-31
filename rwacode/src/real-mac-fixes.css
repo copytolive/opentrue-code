@@ -81,11 +81,11 @@
   margin-right:0!important;
 }
 .preview-surface.tablet{
-  width:min(768px,100%);
+  width:min(768px,82%);
   justify-self:center;
 }
 .preview-surface.mobile{
-  width:min(390px,100%);
+  width:min(390px,62%);
   justify-self:center;
 }
 .device-button{display:grid;place-items:center;padding:0}
