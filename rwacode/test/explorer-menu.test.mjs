@@ -6,44 +6,47 @@ const css = await readFile(new URL('../src/explorer-menu-fix.css', import.meta.u
 const js = await readFile(new URL('../src/explorer-menu-fix.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../src/index.html', import.meta.url), 'utf8');
 
-test('Explorer menu is compact, one-column, and cannot overflow horizontally', () => {
-  assert.match(css, /grid-template-columns:minmax\(0,1fr\)!important/);
-  assert.match(css, /overflow-x:hidden!important/);
-  assert.match(css, /max-height:min\(68vh,560px\)!important/);
-  assert.match(css, /height:30px!important/);
-  assert.match(css, /grid-column:1\/-1!important/);
+test('legacy Explorer action panel can never render', () => {
+  assert.match(css, /#fileActions\{[\s\S]*display:none!important/);
+  assert.match(css, /pointer-events:none!important/);
+  assert.match(js, /MutationObserver/);
+  assert.match(js, /legacyMenu\.classList\.add\('hidden'\)/);
 });
 
-test('Explorer menu closes on outside click, Escape, blur, resize, and Explorer scroll', () => {
+test('Explorer context menu is created only for a direct row right-click', () => {
+  assert.match(js, /tree\.addEventListener\('contextmenu'/);
+  assert.match(js, /closest\('\.file-row\[data-path\]'\)/);
+  assert.match(js, /event\.stopImmediatePropagation\(\)/);
+  assert.match(js, /document\.createElement\('div'\)/);
+  assert.match(js, /rwExplorerContextMenu/);
+  assert.match(js, /document\.body\.appendChild\(menu\)/);
+});
+
+test('dynamic context menu follows the pointer in viewport coordinates', () => {
+  assert.match(css, /\.rw-explorer-context-menu\{[\s\S]*position:fixed/);
+  assert.match(js, /window\.innerWidth - rect\.width/);
+  assert.match(js, /window\.innerHeight - rect\.height/);
+  assert.match(js, /menu\.style\.left/);
+  assert.match(js, /menu\.style\.top/);
+});
+
+test('clicked file or folder becomes the exact action target without rerender', () => {
+  assert.match(js, /state\.selectedPath = row\.dataset\.path/);
+  assert.match(js, /row\.classList\.add\('selected'\)/);
+  assert.doesNotMatch(js, /renderDirectory\(/);
+  assert.match(js, /data-real-action/);
+  assert.match(js, /source\.click\(\)/);
+});
+
+test('context menu closes on outside click, Escape, blur, resize, and tree scroll', () => {
   assert.match(js, /document\.addEventListener\('pointerdown'/);
   assert.match(js, /event\.key === 'Escape'/);
   assert.match(js, /window\.addEventListener\('blur', closeMenu\)/);
   assert.match(js, /window\.addEventListener\('resize', closeMenu\)/);
-  assert.match(js, /panel\.addEventListener\('scroll', closeMenu, true\)/);
+  assert.match(js, /tree\.addEventListener\('scroll', closeMenu, true\)/);
 });
 
-test('right-click capture is the sole authoritative Explorer row trigger', () => {
-  assert.match(js, /tree\.addEventListener\('contextmenu',[\s\S]*\}, true\)/);
-  assert.match(js, /closest\('\.file-row\[data-path\]'\)/);
-  assert.match(js, /event\.stopImmediatePropagation\(\)/);
-  assert.match(js, /state\.selectedPath = path/);
-  assert.match(js, /row\.classList\.add\('selected'\)/);
-  assert.match(js, /menu\.classList\.remove\('hidden'\)/);
-  assert.match(js, /positionMenu\(event\.clientX, event\.clientY\)/);
-  assert.doesNotMatch(js, /file-row-more/);
-  assert.doesNotMatch(js, /panelMore/);
-  assert.match(css, /#fileMoreButton,[\s\S]*\.file-row-more[\s\S]*display:none!important/);
-});
-
-test('context menu adapts to the exact clicked file or folder', () => {
-  assert.match(js, /menu\.dataset\.contextPath = path/);
-  assert.match(js, /menu\.dataset\.contextType = row\.dataset\.type/);
-  assert.match(js, /Add Folder to Chat/);
-  assert.match(js, /Add File to Chat/);
-  assert.match(js, /clipboardState\(\)/);
-});
-
-test('final Explorer menu patch loads after the real-Mac layer', () => {
+test('final Explorer patch still loads after the real-Mac action layer', () => {
   assert.match(html, /explorer-menu-fix\.css/);
   assert.match(html, /real-mac-ui\.js[\s\S]*explorer-menu-fix\.js/);
 });
