@@ -5,7 +5,8 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const renderer = fs.readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const menu = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
-const main = fs.readFileSync(new URL('../electron/main-v2.cjs', import.meta.url), 'utf8');
+const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+const aiBridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
 const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
 const source = `${renderer}\n${menu}`;
 
@@ -14,7 +15,8 @@ const requiredBindings = [
   'newTabButton', 'backButton', 'forwardButton', 'reloadButton', 'homeButton', 'addressInput',
   'openExternalButton', 'browserMenuButton', 'filesCollapseButton', 'rightCollapseButton',
   'fileSearchButton', 'fileRefreshButton', 'fileMoreButton', 'editorSaveButton', 'editorCloseButton',
-  'editorRevealButton', 'previewGoButton', 'previewReloadButton', 'previewExternalButton',
+  'editorRevealButton', 'proposalCancelButton', 'proposalApplyButton', 'proposalRevealButton',
+  'previewGoButton', 'previewReloadButton', 'previewExternalButton',
 ];
 
 test('every primary visible control has implementation code', () => {
@@ -54,21 +56,24 @@ test('workspace file changes are watched and refreshed without manual reload', (
   assert.match(renderer, /loadDirectory\(state\.currentDir, true\)/);
 });
 
-test('local AI bridge inserts only explicitly selected local file context into supported providers', () => {
-  assert.match(preload, /sendContext: \(relativePath, content, instruction\).*'ai:sendContext'/s);
-  assert.match(main, /function providerForUrl/);
-  assert.match(main, /chatgpt\.com/);
-  assert.match(main, /claude\.ai/);
-  assert.match(main, /gemini\.google\.com/);
-  assert.match(main, /MAX_AI_CONTEXT_BYTES/);
-  assert.match(main, /submitted: false/);
-  assert.match(menu, /Send to AI/);
-  assert.match(menu, /api\.ai\.sendContext/);
-  assert.match(menu, /Nothing is submitted automatically/);
+test('selective AI bridge sends only the chosen file and requires review before write-back', () => {
+  assert.match(html, /data-action="ai-send"/);
+  assert.match(html, /data-action="ai-import"/);
+  assert.match(html, /id="proposalPanel"/);
+  assert.match(renderer, /api\.ai\.sendFile\(target, instruction\)/);
+  assert.match(renderer, /api\.ai\.readReply\(\)/);
+  assert.match(renderer, /window\.confirm\(`Replace \$\{target\}/);
+  assert.match(renderer, /api\.files\.write\(target, content\)/);
+  assert.match(aiBridge, /MAX_AI_CONTEXT_BYTES = 256 \* 1024/);
+  assert.match(aiBridge, /chatgpt\.com/);
+  assert.match(aiBridge, /claude\.ai/);
+  assert.match(aiBridge, /gemini\.google\.com/);
+  assert.match(aiBridge, /Security boundary: you are receiving only the selected file content/);
 });
 
 test('preview initial about:blank state cannot masquerade as live', () => {
-  assert.match(main, /state: live \? 'LIVE' : 'IDLE'/);
+  assert.match(main, /emitPreviewState\('IDLE'\)/);
+  assert.match(main, /url === 'about:blank'\) emitPreviewState\('IDLE'\)/);
   assert.match(main, /did-fail-load/);
-  assert.match(menu, /preview\?\.state === 'LIVE' && \^https\?:/);
+  assert.match(renderer, /preview\.state \|\| \(preview\.loading \? 'LOADING' : 'IDLE'\)/);
 });
