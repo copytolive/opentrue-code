@@ -112,19 +112,33 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
 
     const script = `(() => {
       const provider = ${JSON.stringify(provider)};
-      const selectors = provider === 'ChatGPT'
+      const messageSelectors = provider === 'ChatGPT'
         ? ['[data-message-author-role="assistant"]','article[data-testid^="conversation-turn"] .markdown','article .markdown']
         : provider === 'Claude'
           ? ['[data-testid="assistant-message"]','.font-claude-message','[class*="font-claude-message"]','.prose']
           : ['model-response','.model-response-text','message-content','.markdown'];
-      let nodes = [];
-      for (const selector of selectors) {
+      let messages = [];
+      for (const selector of messageSelectors) {
         const found = Array.from(document.querySelectorAll(selector)).filter((node) => (node.innerText || '').trim());
-        if (found.length) { nodes = found; break; }
+        if (found.length) { messages = found; break; }
       }
-      const node = nodes.at(-1);
+      const node = messages.at(-1);
       if (!node) return { ok:false, provider, error:'assistant reply not found yet' };
-      return { ok:true, provider, text:(node.innerText || node.textContent || '').trim() };
+
+      let codeBlocks = [];
+      for (const selector of ['pre code','code-block','pre','.code-block']) {
+        const found = Array.from(node.querySelectorAll(selector))
+          .map((code) => (code.innerText || code.textContent || '').replace(/\\n$/, ''))
+          .filter((value) => value.trim().length > 0);
+        if (found.length) { codeBlocks = [...new Set(found)]; break; }
+      }
+
+      return {
+        ok:true,
+        provider,
+        text:(node.innerText || node.textContent || '').trim(),
+        codeBlocks,
+      };
     })()`;
 
     const result = await wc.executeJavaScript(script, true);
@@ -133,7 +147,12 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     if (!text) throw new Error('latest assistant reply is empty');
     if (Buffer.byteLength(text, 'utf8') > MAX_AI_REPLY_BYTES) throw new Error('assistant reply is too large to import');
 
-    const replacement = extractSingleReplacement(text);
+    const codeBlocks = Array.isArray(result.codeBlocks) ? result.codeBlocks.map(String) : [];
+    if (codeBlocks.length !== 1) {
+      throw new Error(`AI import requires exactly one rendered replacement code block; found ${codeBlocks.length}`);
+    }
+    const replacement = codeBlocks[0];
+    if (Buffer.byteLength(replacement, 'utf8') > MAX_AI_REPLY_BYTES) throw new Error('replacement code block is too large to import');
     return { provider, text: `\`\`\`\n${replacement}\n\`\`\`` };
   }
 
