@@ -4,46 +4,49 @@ import { readFile } from 'node:fs/promises';
 
 const css = await readFile(new URL('../src/explorer-menu-fix.css', import.meta.url), 'utf8');
 const js = await readFile(new URL('../src/explorer-menu-fix.js', import.meta.url), 'utf8');
+const preload = await readFile(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
+const explorerOps = await readFile(new URL('../electron/explorer-ops.cjs', import.meta.url), 'utf8');
 const html = await readFile(new URL('../src/index.html', import.meta.url), 'utf8');
 
-test('legacy Explorer action panel can never render', () => {
+test('legacy Explorer action panel is permanently non-rendering backend only', () => {
   assert.match(css, /#fileActions\{[\s\S]*display:none!important/);
   assert.match(css, /pointer-events:none!important/);
-  assert.match(js, /MutationObserver/);
   assert.match(js, /legacyMenu\.classList\.add\('hidden'\)/);
+  assert.doesNotMatch(js, /MutationObserver/);
 });
 
-test('Explorer context menu is created only for a direct row right-click', () => {
+test('right-click invokes a narrow native Electron context menu only for a real row', () => {
   assert.match(js, /tree\.addEventListener\('contextmenu'/);
   assert.match(js, /closest\('\.file-row\[data-path\]'\)/);
   assert.match(js, /event\.stopImmediatePropagation\(\)/);
-  assert.match(js, /document\.createElement\('div'\)/);
-  assert.match(js, /rwExplorerContextMenu/);
-  assert.match(js, /document\.body\.appendChild\(menu\)/);
+  assert.match(js, /api\.explorer\.showContextMenu\(relativePath\)/);
+  assert.match(preload, /showContextMenu:\s*\(relativePath\)\s*=>\s*ipcRenderer\.invoke\('explorer:contextMenu'/);
+  assert.match(explorerOps, /ipcMain\.handle\('explorer:contextMenu'/);
+  assert.match(explorerOps, /Menu\.buildFromTemplate/);
+  assert.match(explorerOps, /menu\.popup/);
 });
 
-test('dynamic context menu follows the pointer in viewport coordinates', () => {
-  assert.match(css, /\.rw-explorer-context-menu\{[\s\S]*position:fixed/);
-  assert.match(js, /window\.innerWidth - rect\.width/);
-  assert.match(js, /window\.innerHeight - rect\.height/);
-  assert.match(js, /menu\.style\.left/);
-  assert.match(js, /menu\.style\.top/);
+test('context menu open path has no renderer overlay or awaited clipboard IPC', () => {
+  assert.doesNotMatch(js, /document\.createElement\(['"]div['"]\)/);
+  assert.doesNotMatch(js, /rwExplorerContextMenu/);
+  assert.doesNotMatch(js, /clipboardState/);
+  assert.doesNotMatch(js, /async function createMenu/);
 });
 
-test('clicked file or folder becomes the exact action target without rerender', () => {
+test('native menu preserves file/folder-specific real actions', () => {
+  for (const action of ['new-file','new-folder','reveal','open-terminal','add-chat','cut','copy','paste','copy-path','copy-relative','rename','delete']) {
+    assert.match(explorerOps, new RegExp(action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(explorerOps, /Open in Images Preview/);
+  assert.match(explorerOps, /Find in Folder/);
+  assert.match(explorerOps, /enabled:\s*canPaste/);
+  assert.match(explorerOps, /enabled:\s*canChat/);
+});
+
+test('clicked row remains the exact backend action target', () => {
   assert.match(js, /state\.selectedPath = row\.dataset\.path/);
-  assert.match(js, /row\.classList\.add\('selected'\)/);
-  assert.doesNotMatch(js, /renderDirectory\(/);
-  assert.match(js, /data-real-action/);
   assert.match(js, /source\.click\(\)/);
-});
-
-test('context menu closes on outside click, Escape, blur, resize, and tree scroll', () => {
-  assert.match(js, /document\.addEventListener\('pointerdown'/);
-  assert.match(js, /event\.key === 'Escape'/);
-  assert.match(js, /window\.addEventListener\('blur', closeMenu\)/);
-  assert.match(js, /window\.addEventListener\('resize', closeMenu\)/);
-  assert.match(js, /tree\.addEventListener\('scroll', closeMenu, true\)/);
+  assert.doesNotMatch(js, /renderDirectory\(/);
 });
 
 test('final Explorer patch still loads after the real-Mac action layer', () => {
