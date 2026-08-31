@@ -16,7 +16,7 @@ test('path guard allows files inside root and rejects escape attempts', () => {
   fs.symlinkSync(outside, path.join(root, 'escape-link'));
   const guard = createPathGuard(root);
 
-  assert.equal(guard.resolveExisting('inside.txt'), path.join(root, 'inside.txt'));
+  assert.equal(guard.resolveExisting('inside.txt'), fs.realpathSync.native(path.join(root, 'inside.txt')));
   assert.throws(() => guard.resolveExisting('../outside.txt'));
   assert.throws(() => guard.resolveExisting('escape-link/outside.txt'));
   assert.throws(() => guard.resolveExisting('/etc/passwd'));
