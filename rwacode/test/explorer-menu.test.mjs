@@ -6,10 +6,11 @@ const css = await readFile(new URL('../src/explorer-menu-fix.css', import.meta.u
 const js = await readFile(new URL('../src/explorer-menu-fix.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../src/index.html', import.meta.url), 'utf8');
 
-test('Explorer menu is forced into one bounded column without horizontal scrolling', () => {
+test('Explorer menu is compact, one-column, and cannot overflow horizontally', () => {
   assert.match(css, /grid-template-columns:minmax\(0,1fr\)!important/);
   assert.match(css, /overflow-x:hidden!important/);
-  assert.match(css, /max-width:calc\(100% - 16px\)!important/);
+  assert.match(css, /max-height:min\(68vh,560px\)!important/);
+  assert.match(css, /height:30px!important/);
   assert.match(css, /grid-column:1\/-1!important/);
 });
 
@@ -21,13 +22,25 @@ test('Explorer menu closes on outside click, Escape, blur, resize, and Explorer 
   assert.match(js, /panel\.addEventListener\('scroll', closeMenu, true\)/);
 });
 
-test('Explorer context menu opens only for a right-clicked file or folder row', () => {
-  assert.match(js, /tree\.addEventListener\('contextmenu'/);
+test('right-click capture is the sole authoritative Explorer row trigger', () => {
+  assert.match(js, /tree\.addEventListener\('contextmenu',[\s\S]*\}, true\)/);
   assert.match(js, /closest\('\.file-row\[data-path\]'\)/);
-  assert.match(js, /if \(!row\) \{[\s\S]*closeMenu\(\)/);
+  assert.match(js, /event\.stopImmediatePropagation\(\)/);
+  assert.match(js, /state\.selectedPath = path/);
+  assert.match(js, /row\.classList\.add\('selected'\)/);
+  assert.match(js, /menu\.classList\.remove\('hidden'\)/);
+  assert.match(js, /positionMenu\(event\.clientX, event\.clientY\)/);
   assert.doesNotMatch(js, /file-row-more/);
   assert.doesNotMatch(js, /panelMore/);
   assert.match(css, /#fileMoreButton,[\s\S]*\.file-row-more[\s\S]*display:none!important/);
+});
+
+test('context menu adapts to the exact clicked file or folder', () => {
+  assert.match(js, /menu\.dataset\.contextPath = path/);
+  assert.match(js, /menu\.dataset\.contextType = row\.dataset\.type/);
+  assert.match(js, /Add Folder to Chat/);
+  assert.match(js, /Add File to Chat/);
+  assert.match(js, /clipboardState\(\)/);
 });
 
 test('final Explorer menu patch loads after the real-Mac layer', () => {
