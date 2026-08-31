@@ -44,7 +44,7 @@ jobs:
         working-directory: rwacode
         run: find dist -maxdepth 2 -type f -print
       - name: Upload RWACode macOS artifacts
-        uses: actions/upload-artifact@ea165f8d65b5e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: rwacode-macos-x64-${{ github.run_id }}
           path: |
