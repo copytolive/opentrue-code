@@ -17,12 +17,12 @@ regexes = [
 ]
 
 # Historical TapeOut source contains the public WBNB BNB Chain contract address.
-# This exact source line is not a credential. Keep the exception deliberately
-# line-exact so other generic-api-key findings continue to fail closed.
+# This exact indented source line is not a credential. Keep the exception line-
+# exact so any other generic-api-key finding continues to fail closed.
 [[allowlists]]
 description = "Exact public WBNB contract default in historical TapeOut adapter"
 targetRules = ["generic-api-key"]
 regexTarget = "line"
 regexes = [
-  '''^wbnb=os\.environ\.get\("WBNB_TOKEN_ADDRESS","0xbb4CdB9CBd36B01d1cBaEBF2De08d9173bc095c"\)\.strip\(\)$'''
+  '''^\s*wbnb=os\.environ\.get\("WBNB_TOKEN_ADDRESS","0xbb4CdB9CBd36B01d1cBaEBF2De08d9173bc095c"\)\.strip\(\)\s*$'''
 ]
