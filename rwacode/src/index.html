@@ -6,6 +6,7 @@
   <title>RWACode</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./bridge.css" />
+  <link rel="stylesheet" href="./clean-shell.css" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -74,7 +75,7 @@
             <p>Normal browser sessions. Native local workspace. Zero API-key UI.</p>
             <div class="provider-grid">
               <button class="provider-card" data-url="https://claude.ai"><span>C</span><b>Claude</b><small>Persistent browser login</small></button>
-              <button class="provider-card" data-url="https://chatgpt.com"><span>◎</span><b>ChatGPT</b><small>Separate account per profile</small></button>
+              <button class="provider-card" data-url="https://chatgpt.com"><span>◎</span><b>ChatGPT</b><small>Browser login</small></button>
               <button class="provider-card" data-url="https://gemini.google.com"><span>✦</span><b>Gemini</b><small>Google browser login</small></button>
             </div>
           </div>
@@ -135,5 +136,6 @@
 
   <script src="./renderer.js"></script>
   <script src="./browser-menu.js"></script>
+  <script src="./workspace-ui.js"></script>
 </body>
 </html>
