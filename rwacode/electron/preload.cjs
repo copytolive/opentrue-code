@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('rwacode', {
     forward: () => ipcRenderer.invoke('browser:forward'),
     reload: () => ipcRenderer.invoke('browser:reload'),
     home: () => ipcRenderer.invoke('browser:home'),
+    openExternal: (value) => ipcRenderer.invoke('browser:openExternal', value),
     setBounds: (bounds) => ipcRenderer.invoke('browser:setBounds', bounds),
     onTabs: (handler) => ipcRenderer.on('browser:tabs', (_event, state) => handler(state)),
     onCrash: (handler) => ipcRenderer.on('browser:crash', (_event, state) => handler(state)),
