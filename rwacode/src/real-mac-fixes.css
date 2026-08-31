@@ -1,0 +1,107 @@
+/* Real-Mac parity fixes. Keep the provider page native; only the RWACode shell changes. */
+
+/* macOS already supplies native traffic lights with titleBarStyle=hiddenInset. */
+.traffic{display:none!important}
+.topbar{
+  min-width:0;
+  overflow:hidden;
+  padding-left:94px!important;
+  padding-right:18px!important;
+}
+.brand,.security-chip{flex:0 0 auto}
+.workspace-chip{min-width:0;flex:0 1 260px;max-width:260px}
+.top-spacer{min-width:8px}
+.security-chip{max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Never let fixed side widths push the right rail outside the window. */
+.workspace-grid{
+  min-width:0;
+  overflow:hidden;
+  grid-template-columns:minmax(280px,var(--files-w)) minmax(0,1fr) minmax(320px,var(--right-w))!important;
+}
+.files-panel,.browser-panel,.right-panel{min-width:0;max-width:100%;overflow:hidden}
+
+/* Explorer text stays readable and the full path can wrap instead of disappearing. */
+.root-lock>span:last-child{
+  overflow:visible!important;
+  text-overflow:clip!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere;
+  word-break:break-word!important;
+}
+.file-row{min-width:0}
+.file-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-path-hint{flex:0 0 auto}
+
+/* VS Code-like context menu. */
+.file-actions{
+  width:310px!important;
+  max-height:min(650px,calc(100vh - 90px));
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:1px!important;
+  overflow:auto;
+  padding:6px!important;
+}
+.file-actions button{
+  min-height:34px!important;
+  height:auto!important;
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:7px 12px!important;
+}
+.file-actions button>span:first-child{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-actions .menu-shortcut{flex:0 0 auto;color:#6f7782;font-size:11px}
+.file-actions button:disabled{opacity:.36;cursor:default}
+.file-actions button:disabled:hover{background:transparent}
+.file-action-separator{height:1px;margin:5px 7px;background:#39414b}
+
+/* Inspector rows can never force the panel wider than its grid track. */
+.inspector-content{min-width:0;overflow:auto!important}
+.inspector-card{min-width:0;gap:16px}
+.inspector-card>span{flex:0 0 auto}
+.inspector-card>b{
+  min-width:0;
+  max-width:68%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-align:right;
+}
+
+/* Preview device geometry: actual centered device viewport, not percentage margins. */
+.preview-content{min-width:0}
+.preview-surface{
+  width:100%;
+  max-width:100%;
+  justify-self:stretch;
+  margin-left:0!important;
+  margin-right:0!important;
+}
+.preview-surface.tablet{
+  width:min(768px,82%);
+  justify-self:center;
+}
+.preview-surface.mobile{
+  width:min(390px,62%);
+  justify-self:center;
+}
+.device-button{display:grid;place-items:center;padding:0}
+.device-button svg{width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:1.7}
+.device-button[data-device="tablet"] svg{width:15px;height:19px}
+.device-button[data-device="mobile"] svg{width:12px;height:19px}
+
+/* Narrow-window survival: side rails shrink first; browser remains usable. */
+@media (max-width:1450px){
+  :root{--files-w:330px;--right-w:360px}
+  .workspace-chip{max-width:210px}
+  .security-chip{max-width:126px}
+}
+@media (max-width:1220px){
+  :root{--files-w:290px;--right-w:325px}
+  .workspace-chip{max-width:160px}
+  .brand strong{font-size:14px}
+  .security-chip{max-width:110px;padding-inline:10px}
+}

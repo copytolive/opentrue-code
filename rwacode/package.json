@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check electron/bootstrap.cjs && node --check electron/main.cjs && node --check electron/ai-bridge.cjs && node --check electron/preload.cjs && node --check src/renderer.js && node --check src/browser-menu.js",
+    "check": "node --check electron/bootstrap.cjs && node --check electron/main.cjs && node --check electron/explorer-ops.cjs && node --check electron/ai-bridge.cjs && node --check electron/preload.cjs && node --check src/renderer.js && node --check src/browser-menu.js && node --check src/workspace-ui.js && node --check src/real-mac-ui.js",
     "build:mac": "electron-builder --mac dmg zip --x64 --publish never"
   },
   "devDependencies": {

@@ -96,4 +96,7 @@ for (const signalName of ['SIGINT', 'SIGTERM']) {
   });
 }
 
+// Narrow, root-locked Explorer helpers (copy/cut/paste, path copy, Preview and Terminal open).
+// This is intentionally not a generic shell/execute bridge.
+require('./explorer-ops.cjs');
 require('./main.cjs');
