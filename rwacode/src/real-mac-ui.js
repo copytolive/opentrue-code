@@ -28,6 +28,11 @@
     try { status(message); } catch {}
   }
 
+  async function promptText(title, value = '', message = '') {
+    if (window.rwacodeDialogs?.prompt) return window.rwacodeDialogs.prompt(title, value, message);
+    return null;
+  }
+
   function selectedRow() {
     return document.querySelector('.file-row.selected');
   }
@@ -134,7 +139,7 @@
       <button data-real-action="new-folder"><span>New Folder…</span></button>
       <button data-real-action="reveal"><span>Reveal in Finder</span><span class="menu-shortcut">⌥⌘R</span></button>
       <button data-real-action="open-image"><span>Open in Images Preview</span></button>
-      <button data-real-action="open-terminal"><span>Open in Integrated Terminal</span></button>
+      <button data-real-action="open-terminal"><span>Open in Terminal</span></button>
       <div class="file-action-separator"></div>
       <button data-real-action="find-folder"><span>Find in Folder…</span><span class="menu-shortcut">⌥⇧F</span></button>
       <button data-real-action="add-chat" class="ai-action"><span>Add File to Chat</span></button>
@@ -181,7 +186,17 @@
       const s = runtimeState();
       const meta = selectedMeta();
       try {
-        if (action === 'new-file' || action === 'new-folder' || action === 'reveal' || action === 'rename' || action === 'delete') {
+        if (action === 'new-file' || action === 'new-folder') {
+          const destination = meta.type === 'directory' ? meta.path : (s?.currentDir || '.');
+          const name = await promptText(action === 'new-file' ? 'New file name' : 'New folder name');
+          if (!name?.trim()) return;
+          await api.files.create(destination, name.trim(), action === 'new-folder' ? 'directory' : 'file');
+          if (typeof loadDirectory === 'function') await loadDirectory(s?.currentDir || '.', true);
+          setStatus(`${action === 'new-folder' ? 'Folder' : 'File'} created in ${destination}`);
+          fileActions.classList.add('hidden');
+          return;
+        }
+        if (action === 'reveal' || action === 'rename' || action === 'delete') {
           await fileAction(action);
           return;
         }
