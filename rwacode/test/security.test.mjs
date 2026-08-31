@@ -43,7 +43,7 @@ test('local AI bridge is provider-allowlisted and bounded', () => {
   assert.equal(MAX_AI_CONTEXT_BYTES, 256 * 1024);
   const prompt = buildPrompt('demo.txt', 'hello', 'review');
   assert.match(prompt, /Selected file: demo\.txt/);
-  assert.match(prompt, /Security boundary: you are receiving only the selected file content/);
+  assert.match(prompt, /Security boundary: you are receiving only this explicitly selected file/);
 });
 
 test('AI bridge can only read through the existing root-locked file reader', () => {
