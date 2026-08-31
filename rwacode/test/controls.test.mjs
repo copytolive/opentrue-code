@@ -68,7 +68,7 @@ test('selective AI bridge sends only the chosen file and requires review before 
   assert.match(aiBridge, /chatgpt\.com/);
   assert.match(aiBridge, /claude\.ai/);
   assert.match(aiBridge, /gemini\.google\.com/);
-  assert.match(aiBridge, /Security boundary: you are receiving only the selected file content/);
+  assert.match(aiBridge, /Security boundary: you are receiving only this explicitly selected file/);
 });
 
 test('preview initial about:blank state cannot masquerade as live', () => {
