@@ -1,0 +1,37 @@
+/* Final Explorer context-menu geometry. Loaded last so the menu cannot fall back to the old two-column layout. */
+.file-actions{
+  width:min(300px,calc(100% - 16px))!important;
+  max-width:calc(100% - 16px)!important;
+  min-width:0!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-auto-flow:row!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  contain:layout paint;
+}
+.file-actions>*{
+  grid-column:1/-1!important;
+  min-width:0!important;
+  max-width:100%!important;
+}
+.file-actions button{
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  justify-content:flex-start!important;
+}
+.file-actions button>span:first-child{
+  min-width:0!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.file-actions .menu-shortcut{
+  margin-left:auto!important;
+  white-space:nowrap!important;
+}
+.file-action-separator{
+  width:auto!important;
+  max-width:none!important;
+}
