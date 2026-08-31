@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RWACode</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+      <div class="brand"><div class="brand-mark">R//</div><strong>RWACode</strong></div>
+      <div class="workspace-chip" id="workspaceChip">⌁ chat-local-online</div>
+      <div class="top-spacer"></div>
+      <div class="security-chip"><i></i>Root locked · Native bridge</div>
+      <div class="profile-wrap">
+        <button id="profileButton" class="profile-button" aria-haspopup="menu"><span id="profileAvatar" class="avatar">P</span><span id="profileName">Personal</span><span>⌄</span></button>
+        <div id="profileMenu" class="profile-menu" role="menu">
+          <div class="menu-label">Browser profiles</div>
+          <div id="profileList"></div>
+          <div class="menu-separator"></div>
+          <button id="addProfileButton" class="menu-action">＋ Add profile</button>
+          <button id="renameProfileButton" class="menu-action">✎ Rename active profile</button>
+          <button id="clearProfileButton" class="menu-action">⌫ Clear active site data</button>
+          <button id="deleteProfileButton" class="menu-action danger">− Delete active profile</button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="tab-strip">
+      <div id="tabs" class="tabs"></div>
+      <button id="newTabButton" class="tab-plus" title="New tab">＋</button>
+    </nav>
+
+    <main class="workspace-grid">
+      <aside class="files-panel">
+        <div class="panel-header"><span class="kicker">LOCAL</span><b>Files</b><span class="grow"></span><button id="fileSearchButton" class="icon-button" title="Search files">⌕</button><button id="fileRefreshButton" class="icon-button" title="Refresh">↻</button><button id="fileMoreButton" class="icon-button" title="File actions">⋯</button></div>
+        <div class="root-lock" id="rootLock"><strong>ROOT LOCK</strong><span id="rootPath"></span></div>
+        <div id="fileSearch" class="file-search hidden"><input id="fileSearchInput" placeholder="Filter current folder…" /></div>
+        <div id="fileActions" class="file-actions hidden">
+          <button data-action="new-file">New file</button><button data-action="new-folder">New folder</button><button data-action="reveal">Reveal selected</button><button data-action="rename">Rename</button><button data-action="delete" class="danger">Delete</button>
+        </div>
+        <div id="fileTree" class="file-tree"></div>
+      </aside>
+
+      <section class="browser-panel">
+        <div class="browser-toolbar">
+          <button id="backButton" class="nav-button" title="Back">←</button>
+          <button id="forwardButton" class="nav-button" title="Forward">→</button>
+          <button id="reloadButton" class="nav-button" title="Reload">↻</button>
+          <button id="homeButton" class="nav-button" title="New tab">⌂</button>
+          <div class="address-wrap"><span class="address-lock">◆</span><input id="addressInput" class="address-input" value="rwacode://newtab" spellcheck="false" /><span class="partition-badge">PROFILE ISOLATED</span></div>
+          <button id="openExternalButton" class="nav-button" title="Open current URL externally">↗</button>
+          <button id="browserMenuButton" class="nav-button" title="Browser menu">⋯</button>
+        </div>
+        <div id="browserSurface" class="browser-surface">
+          <div id="newTabPage" class="new-tab-page">
+            <div class="hero-mark">R//</div>
+            <h1>Browse. Build. Preview.</h1>
+            <p>Normal browser sessions. Native local workspace. Zero API-key UI.</p>
+            <div class="provider-grid">
+              <button class="provider-card" data-url="https://claude.ai"><span>C</span><b>Claude</b><small>Persistent browser login</small></button>
+              <button class="provider-card" data-url="https://chatgpt.com"><span>◎</span><b>ChatGPT</b><small>Separate account per profile</small></button>
+              <button class="provider-card" data-url="https://gemini.google.com"><span>✦</span><b>Gemini</b><small>Google browser login</small></button>
+            </div>
+          </div>
+          <div id="browserCrash" class="surface-message hidden"><h2>Tab renderer stopped</h2><p>The tab can be reloaded without restarting RWACode.</p><button id="crashReloadButton">Reload tab</button></div>
+        </div>
+      </section>
+
+      <aside class="right-panel">
+        <section class="preview-panel">
+          <div class="panel-header"><span class="kicker">PROJECT</span><b>Preview</b><span class="grow"></span><button class="icon-button device-button active" data-device="desktop">▱</button><button class="icon-button device-button" data-device="tablet">▯</button><button class="icon-button device-button" data-device="mobile">▯</button><button id="previewReloadButton" class="icon-button">↻</button><button id="previewExternalButton" class="icon-button">↗</button></div>
+          <div class="preview-toolbar"><input id="previewUrlInput" value="http://127.0.0.1:3000" /><button id="previewGoButton">Load</button></div>
+          <div id="previewSurface" class="preview-surface"><div id="previewPlaceholder" class="preview-placeholder"><span>LIVE PREVIEW</span><h2>Build beyond<br />the browser.</h2><p>Load a local project URL to preview it here.</p></div></div>
+        </section>
+        <section class="signals-panel">
+          <div class="panel-header"><span class="kicker">SYSTEM</span><b>Workspace Signals</b><span class="grow"></span></div>
+          <div class="signals">
+            <div><b>Browser profile</b><span id="signalProfile">PERSONAL</span></div>
+            <div><b>Session isolation</b><span>PERSISTENT</span></div>
+            <div><b>Native file bridge</b><span>ROOT LOCKED</span></div>
+            <div><b>Preview channel</b><span id="signalPreview">IDLE</span></div>
+            <div><b>HTTP control API</b><span class="muted">ABSENT</span></div>
+            <div><b>External web Node access</b><span class="muted">DENIED</span></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="statusbar"><span class="secure-dot">● Secure local</span><span>RWACode Browser Engine</span><span id="statusMessage">Ready</span><span class="grow"></span><span>Profile: <b id="statusProfile">Personal</b></span><span>UTF-8</span><span class="kbd">⌘K</span></footer>
+  </div>
+
+  <dialog id="editorDialog" class="editor-dialog">
+    <form method="dialog" class="editor-card">
+      <header><strong id="editorTitle">File</strong><span class="grow"></span><button value="cancel">×</button></header>
+      <textarea id="editorText" spellcheck="false"></textarea>
+      <footer><span id="editorMeta"></span><span class="grow"></span><button value="cancel">Cancel</button><button id="editorSaveButton" value="default" class="primary">Save</button></footer>
+    </form>
+  </dialog>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>
