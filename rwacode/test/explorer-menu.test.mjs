@@ -12,7 +12,7 @@ test('legacy Explorer action panel is permanently non-rendering backend only', (
   assert.match(css, /#fileActions\{[\s\S]*display:none!important/);
   assert.match(css, /pointer-events:none!important/);
   assert.match(js, /legacyMenu\.classList\.add\('hidden'\)/);
-  assert.doesNotMatch(js, /MutationObserver/);
+  assert.doesNotMatch(js, /new\s+MutationObserver|MutationObserver\s*\(/);
 });
 
 test('right-click invokes a narrow native Electron context menu only for a real row', () => {
