@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('rwacode', {
     home: () => ipcRenderer.invoke('browser:home'),
     openExternal: (value) => ipcRenderer.invoke('browser:openExternal', value),
     setBounds: (bounds) => ipcRenderer.invoke('browser:setBounds', bounds),
+    setVisible: (visible) => ipcRenderer.invoke('browser:setVisible', visible),
     onTabs: (handler) => ipcRenderer.on('browser:tabs', (_event, state) => handler(state)),
     onCrash: (handler) => ipcRenderer.on('browser:crash', (_event, state) => handler(state)),
   },
@@ -38,6 +39,8 @@ contextBridge.exposeInMainWorld('rwacode', {
     delete: (relativePath) => ipcRenderer.invoke('fs:delete', relativePath),
     reveal: (relativePath) => ipcRenderer.invoke('fs:reveal', relativePath),
     confirmDelete: (relativePath) => ipcRenderer.invoke('dialog:confirmDelete', relativePath),
+    onChanged: (handler) => ipcRenderer.on('fs:changed', (_event, state) => handler(state)),
+    onWatchError: (handler) => ipcRenderer.on('fs:watch-error', (_event, state) => handler(state)),
   },
   preview: {
     setBounds: (bounds) => ipcRenderer.invoke('preview:setBounds', bounds),

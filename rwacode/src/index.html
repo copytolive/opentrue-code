@@ -34,14 +34,23 @@
     </nav>
 
     <main class="workspace-grid">
-      <aside class="files-panel">
-        <div class="panel-header"><span class="kicker">LOCAL</span><b>Files</b><span class="grow"></span><button id="fileSearchButton" class="icon-button" title="Search files">⌕</button><button id="fileRefreshButton" class="icon-button" title="Refresh">↻</button><button id="fileMoreButton" class="icon-button" title="File actions">⋯</button></div>
-        <div class="root-lock" id="rootLock"><strong>ROOT LOCK</strong><span id="rootPath"></span></div>
-        <div id="fileSearch" class="file-search hidden"><input id="fileSearchInput" placeholder="Filter current folder…" /></div>
-        <div id="fileActions" class="file-actions hidden">
+      <aside id="filesPanel" class="files-panel">
+        <div class="panel-header files-head">
+          <button id="filesCollapseButton" class="icon-button panel-toggle" title="Collapse Local Files">◂</button>
+          <span class="kicker panel-copy">LOCAL</span><b class="panel-copy">Files</b>
+          <span id="fileSyncState" class="sync-badge panel-copy">LIVE</span>
+          <span class="grow"></span>
+          <button id="fileSearchButton" class="icon-button panel-copy" title="Search files">⌕</button>
+          <button id="fileRefreshButton" class="icon-button panel-copy" title="Refresh">↻</button>
+          <button id="fileMoreButton" class="icon-button panel-copy" title="File actions">⋯</button>
+        </div>
+        <div class="root-lock panel-content" id="rootLock"><strong>ROOT LOCK</strong><span id="rootPath"></span></div>
+        <div id="fileBreadcrumb" class="file-breadcrumb panel-content">./</div>
+        <div id="fileSearch" class="file-search panel-content hidden"><input id="fileSearchInput" placeholder="Filter current folder…" /></div>
+        <div id="fileActions" class="file-actions panel-content hidden">
           <button data-action="new-file">New file</button><button data-action="new-folder">New folder</button><button data-action="reveal">Reveal selected</button><button data-action="rename">Rename</button><button data-action="delete" class="danger">Delete</button>
         </div>
-        <div id="fileTree" class="file-tree"></div>
+        <div id="fileTree" class="file-tree panel-content"></div>
       </aside>
 
       <section class="browser-panel">
@@ -66,21 +75,37 @@
             </div>
           </div>
           <div id="browserCrash" class="surface-message hidden"><h2>Tab renderer stopped</h2><p>The tab can be reloaded without restarting RWACode.</p><button id="crashReloadButton">Reload tab</button></div>
+          <section id="editorPanel" class="editor-panel hidden" aria-label="Local file editor">
+            <header class="editor-head">
+              <div><span class="kicker">LOCAL FILE</span><strong id="editorTitle">File</strong></div>
+              <span id="editorDirty" class="editor-dirty hidden">UNSAVED</span>
+              <span class="grow"></span>
+              <button id="editorRevealButton" class="editor-action">Reveal</button>
+              <button id="editorCloseButton" class="editor-close" title="Close local editor">×</button>
+            </header>
+            <textarea id="editorText" spellcheck="false"></textarea>
+            <footer class="editor-foot"><span id="editorMeta"></span><span class="grow"></span><button id="editorSaveButton" class="primary">Save</button></footer>
+          </section>
         </div>
       </section>
 
-      <aside class="right-panel">
+      <aside id="rightPanel" class="right-panel">
         <section class="preview-panel">
-          <div class="panel-header"><span class="kicker">PROJECT</span><b>Preview</b><span class="grow"></span><button class="icon-button device-button active" data-device="desktop">▱</button><button class="icon-button device-button" data-device="tablet">▯</button><button class="icon-button device-button" data-device="mobile">▯</button><button id="previewReloadButton" class="icon-button">↻</button><button id="previewExternalButton" class="icon-button">↗</button></div>
-          <div class="preview-toolbar"><input id="previewUrlInput" value="http://127.0.0.1:3000" /><button id="previewGoButton">Load</button></div>
-          <div id="previewSurface" class="preview-surface"><div id="previewPlaceholder" class="preview-placeholder"><span>LIVE PREVIEW</span><h2>Build beyond<br />the browser.</h2><p>Load a local project URL to preview it here.</p></div></div>
+          <div class="panel-header preview-head">
+            <button id="rightCollapseButton" class="icon-button panel-toggle" title="Collapse Preview">▸</button>
+            <span class="kicker panel-copy">PROJECT</span><b class="panel-copy">Preview</b><span class="grow"></span>
+            <button class="icon-button device-button active panel-copy" data-device="desktop" title="Desktop preview">▱</button><button class="icon-button device-button panel-copy" data-device="tablet" title="Tablet preview">▯</button><button class="icon-button device-button panel-copy" data-device="mobile" title="Mobile preview">▯</button><button id="previewReloadButton" class="icon-button panel-copy" title="Reload preview">↻</button><button id="previewExternalButton" class="icon-button panel-copy" title="Open preview externally">↗</button>
+          </div>
+          <div class="preview-toolbar panel-content"><input id="previewUrlInput" value="http://127.0.0.1:3000" /><button id="previewGoButton">Load</button></div>
+          <div id="previewSurface" class="preview-surface panel-content"><div id="previewPlaceholder" class="preview-placeholder"><span>LIVE PREVIEW</span><h2>Build beyond<br />the browser.</h2><p>Load a local project URL to preview it here.</p></div></div>
         </section>
-        <section class="signals-panel">
+        <section class="signals-panel panel-content">
           <div class="panel-header"><span class="kicker">SYSTEM</span><b>Workspace Signals</b><span class="grow"></span></div>
           <div class="signals">
             <div><b>Browser profile</b><span id="signalProfile">PERSONAL</span></div>
             <div><b>Session isolation</b><span>PERSISTENT</span></div>
             <div><b>Native file bridge</b><span>ROOT LOCKED</span></div>
+            <div><b>File synchronization</b><span id="signalFileSync">LIVE</span></div>
             <div><b>Preview channel</b><span id="signalPreview">IDLE</span></div>
             <div><b>HTTP control API</b><span class="muted">ABSENT</span></div>
             <div><b>External web Node access</b><span class="muted">DENIED</span></div>
@@ -91,14 +116,6 @@
 
     <footer class="statusbar"><span class="secure-dot">● Secure local</span><span>RWACode Browser Engine</span><span id="statusMessage">Ready</span><span class="grow"></span><span>Profile: <b id="statusProfile">Personal</b></span><span>UTF-8</span><span class="kbd">⌘K</span></footer>
   </div>
-
-  <dialog id="editorDialog" class="editor-dialog">
-    <form method="dialog" class="editor-card">
-      <header><strong id="editorTitle">File</strong><span class="grow"></span><button value="cancel">×</button></header>
-      <textarea id="editorText" spellcheck="false"></textarea>
-      <footer><span id="editorMeta"></span><span class="grow"></span><button value="cancel">Cancel</button><button id="editorSaveButton" value="default" class="primary">Save</button></footer>
-    </form>
-  </dialog>
 
   <script src="./renderer.js"></script>
   <script src="./browser-menu.js"></script>
