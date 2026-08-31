@@ -12,6 +12,7 @@ const invokeChannels = [
   'profiles:list', 'profiles:activate', 'profiles:add', 'profiles:rename', 'profiles:clear', 'profiles:delete',
   'browser:newTab', 'browser:switchTab', 'browser:closeTab', 'browser:navigate', 'browser:back',
   'browser:forward', 'browser:reload', 'browser:home', 'browser:openExternal', 'browser:setBounds', 'browser:setVisible',
+  'explorer:contextMenu',
   'fs:list', 'fs:read', 'fs:write', 'fs:create', 'fs:rename', 'fs:delete', 'fs:reveal',
   'fs:copyPath', 'fs:openImagePreview', 'fs:openTerminal', 'fs:clipboardSet', 'fs:clipboardState', 'fs:clipboardPaste',
   'dialog:confirmDelete',
@@ -38,6 +39,13 @@ test('AI IPC surface is narrow and has no generic execute primitive', () => {
   assert.match(preload, /readReply: \(\) => ipcRenderer\.invoke\('ai:readReply'\)/);
   assert.doesNotMatch(preload, /ai:execute|executeJavaScript|eval\(/);
   assert.doesNotMatch(handlers, /ipcMain\.handle\(['"]ai:execute/);
+});
+
+test('Explorer native menu IPC is narrow and path-scoped', () => {
+  assert.match(preload, /showContextMenu:\s*\(relativePath\)/);
+  assert.match(explorerOps, /ipcMain\.handle\('explorer:contextMenu'/);
+  assert.match(explorerOps, /selectedInfo\(relativePath\)/);
+  assert.doesNotMatch(preload, /explorer:execute|shellCommand|spawn\(/);
 });
 
 test('external web views remain sandboxed and Node-free', () => {
