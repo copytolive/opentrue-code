@@ -31,10 +31,15 @@ test('mobile and tablet preview are true centered device rectangles', () => {
 test('Explorer menu keeps a short useful VS Code-like operation set', () => {
   for (const label of [
     'New File…', 'New Folder…', 'Reveal in Finder', 'Open in Images Preview',
-    'Open in Integrated Terminal', 'Find in Folder…', 'Add Folder to Chat',
+    'Open in Terminal', 'Find in Folder…', 'Add Folder to Chat',
     'Cut', 'Copy', 'Paste', 'Copy Path', 'Copy Relative Path', 'Rename…', 'Delete',
   ]) assert.ok(ui.includes(label), `missing Explorer action: ${label}`);
   assert.doesNotMatch(ui, /Share<\/span>/);
+});
+
+test('new file and folder operations target the selected folder like VS Code', () => {
+  assert.match(ui, /const destination = meta\.type === 'directory' \? meta\.path : \(s\?\.currentDir \|\| '\.'\)/);
+  assert.match(ui, /api\.files\.create\(destination, name\.trim\(\), action === 'new-folder' \? 'directory' : 'file'\)/);
 });
 
 test('Explorer utility actions remain root-locked and do not expose generic shell execution', () => {
