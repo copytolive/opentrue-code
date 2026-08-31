@@ -9,7 +9,7 @@ const invokeChannels = [
   'app:getState',
   'profiles:list', 'profiles:activate', 'profiles:add', 'profiles:rename', 'profiles:clear', 'profiles:delete',
   'browser:newTab', 'browser:switchTab', 'browser:closeTab', 'browser:navigate', 'browser:back',
-  'browser:forward', 'browser:reload', 'browser:home', 'browser:openExternal', 'browser:setBounds',
+  'browser:forward', 'browser:reload', 'browser:home', 'browser:openExternal', 'browser:setBounds', 'browser:setVisible',
   'fs:list', 'fs:read', 'fs:write', 'fs:create', 'fs:rename', 'fs:delete', 'fs:reveal', 'dialog:confirmDelete',
   'preview:setBounds', 'preview:load', 'preview:reload', 'preview:openExternal',
 ];
@@ -19,6 +19,13 @@ test('every preload invoke channel has a matching main-process handler', () => {
     assert.match(preload, new RegExp(`ipcRenderer\\.invoke\\(['\"]${channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"]`), `${channel} must be exposed by preload`);
     assert.match(main, new RegExp(`ipcMain\\.handle\\(['\"]${channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"]`), `${channel} must be implemented by main`);
   }
+});
+
+test('event-only file synchronization bridge is explicit and one-way', () => {
+  assert.match(preload, /ipcRenderer\.on\('fs:changed'/);
+  assert.match(preload, /ipcRenderer\.on\('fs:watch-error'/);
+  assert.match(main, /send\('fs:changed'/);
+  assert.match(main, /send\('fs:watch-error'/);
 });
 
 test('external web views remain sandboxed and Node-free', () => {
