@@ -8,11 +8,13 @@
 
   let activeTabId = null;
   let activeProfileId = null;
+  let currentTabs = [];
   let dialogResolver = null;
 
   api.browser.onTabs((payload) => {
     activeTabId = payload.activeTabId;
     activeProfileId = payload.activeProfileId;
+    currentTabs = Array.isArray(payload.tabs) ? payload.tabs : [];
   });
 
   const style = document.createElement('style');
@@ -92,6 +94,38 @@
 
   async function setBrowserVisible(visible) {
     try { await api.browser.setVisible(visible); } catch {}
+  }
+
+  function aiProviderFromUrl(value) {
+    try {
+      const host = new URL(String(value || '')).hostname.toLowerCase();
+      if (host === 'chatgpt.com' || host.endsWith('.chatgpt.com') || host === 'chat.openai.com') return 'ChatGPT';
+      if (host === 'claude.ai' || host.endsWith('.claude.ai')) return 'Claude';
+      if (host === 'gemini.google.com') return 'Gemini';
+    } catch {}
+    return null;
+  }
+
+  async function ensureAiProviderTab() {
+    const currentProvider = aiProviderFromUrl(address.value);
+    if (currentProvider) {
+      await setBrowserVisible(true);
+      return currentProvider;
+    }
+
+    const existing = [...currentTabs].reverse().find((tab) => aiProviderFromUrl(tab.url));
+    if (existing) {
+      await api.browser.switchTab(existing.id);
+      await setBrowserVisible(true);
+      return aiProviderFromUrl(existing.url);
+    }
+
+    if (address.value !== 'rwacode://newtab') {
+      await api.browser.newTab('rwacode://newtab');
+    }
+    await api.browser.navigate('https://chatgpt.com/');
+    await setBrowserVisible(true);
+    return 'ChatGPT';
   }
 
   function finishDialog(value) {
@@ -180,12 +214,17 @@
       const instruction = await uiPrompt(
         'Send selected local file to AI',
         'Read this file and explain it. If changes are needed, return the complete replacement file in one fenced code block.',
-        `Only this file will be shared:\n${target}\n\nRWACode will insert it into the active ChatGPT, Claude, or Gemini composer and will not press Send automatically.`,
+        `Only this file will be shared:\n${target}\n\nRWACode will use the current AI tab, switch to an existing ChatGPT/Claude/Gemini tab, or open ChatGPT when no provider tab exists. It will not press Send automatically.`,
       );
       if (instruction === null) { status('AI bridge: cancelled'); return; }
 
       if (s?.editorPath && typeof closeEditor === 'function') await closeEditor(false);
       if (s?.proposalPath && typeof cancelProposal === 'function') await cancelProposal();
+
+      document.getElementById('signalAiBridge').textContent = 'ROUTING';
+      document.getElementById('aiBridgeBadge').textContent = 'AI BRIDGE · ROUTING';
+      const routedProvider = await ensureAiProviderTab();
+      status(`AI bridge: routing selected file to ${routedProvider}`);
 
       document.getElementById('signalAiBridge').textContent = 'SENDING';
       document.getElementById('aiBridgeBadge').textContent = 'AI BRIDGE · SENDING';
@@ -376,7 +415,7 @@
     send.id = 'editorSendAiButton';
     send.className = 'rw-editor-ai';
     send.textContent = 'Send to AI';
-    send.title = 'Insert this selected local file into the active ChatGPT, Claude, or Gemini composer. RWACode does not press Send automatically.';
+    send.title = 'Insert this selected local file into ChatGPT, Claude, or Gemini. If no AI provider tab is active, RWACode routes to an existing provider tab or opens ChatGPT. RWACode does not press Send automatically.';
     send.onclick = sendFileToActiveAi;
 
     const importReply = document.createElement('button');
