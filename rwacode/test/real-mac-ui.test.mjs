@@ -19,11 +19,13 @@ test('responsive three-surface grid cannot push Inspector offscreen', () => {
   assert.match(css, /grid-template-columns:minmax\(280px,var\(--files-w\)\) minmax\(0,1fr\) minmax\(320px,var\(--right-w\)\)/);
   assert.match(css, /\.inspector-card>b[\s\S]*text-overflow:ellipsis/);
   assert.match(css, /\.root-lock>span:last-child[\s\S]*overflow-wrap:anywhere/);
+  assert.match(ui, /function constrainRailWidths\(\)/);
+  assert.match(ui, /const minCenter = viewport < 1220 \? 460 : 520/);
 });
 
-test('mobile and tablet preview are true centered device rectangles', () => {
-  assert.match(css, /\.preview-surface\.tablet[\s\S]*width:min\(768px,100%\)[\s\S]*justify-self:center/);
-  assert.match(css, /\.preview-surface\.mobile[\s\S]*width:min\(390px,100%\)[\s\S]*justify-self:center/);
+test('mobile and tablet preview are visibly centered device rectangles', () => {
+  assert.match(css, /\.preview-surface\.tablet[\s\S]*width:min\(768px,82%\)[\s\S]*justify-self:center/);
+  assert.match(css, /\.preview-surface\.mobile[\s\S]*width:min\(390px,62%\)[\s\S]*justify-self:center/);
   assert.match(ui, /deviceIcons/);
   assert.match(ui, /window\.dispatchEvent\(new Event\('resize'\)\)/);
 });
