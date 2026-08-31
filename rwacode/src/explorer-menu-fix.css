@@ -1,60 +1,70 @@
-/* Final Explorer context-menu geometry and invocation contract. Loaded last. */
-.file-actions{
-  width:min(292px,calc(100% - 16px))!important;
-  max-width:calc(100% - 16px)!important;
-  min-width:0!important;
-  max-height:min(68vh,560px)!important;
-  padding:4px!important;
-  gap:0!important;
-  grid-template-columns:minmax(0,1fr)!important;
-  grid-auto-flow:row!important;
-  overflow-x:hidden!important;
-  overflow-y:auto!important;
-  overscroll-behavior:contain;
-  contain:layout paint;
-  border-radius:8px!important;
+/* Final Explorer menu contract: the legacy menu is a hidden action backend only. */
+#fileActions{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
 }
-.file-actions>*{
-  grid-column:1/-1!important;
-  min-width:0!important;
-  max-width:100%!important;
-}
-.file-actions button{
-  width:100%!important;
-  min-width:0!important;
-  max-width:100%!important;
-  min-height:30px!important;
-  height:30px!important;
-  padding:0 10px!important;
-  margin:0!important;
-  border-radius:5px!important;
-  font-size:13px!important;
-  line-height:30px!important;
-  justify-content:flex-start!important;
-  white-space:nowrap!important;
-}
-.file-actions button>span:first-child{
-  min-width:0!important;
-  overflow:hidden!important;
-  text-overflow:ellipsis!important;
-  white-space:nowrap!important;
-}
-.file-actions .menu-shortcut{
-  margin-left:auto!important;
-  padding-left:14px!important;
-  white-space:nowrap!important;
-  opacity:.62;
-}
-.file-action-separator{
-  width:auto!important;
-  max-width:none!important;
-  height:1px!important;
-  min-height:1px!important;
-  margin:4px 6px!important;
-}
-
-/* Context actions are intentionally right-click only, VS Code style. */
 #fileMoreButton,
 .file-row-more{
   display:none!important;
+}
+
+.rw-explorer-context-menu{
+  position:fixed;
+  z-index:2147483000;
+  width:268px;
+  max-width:calc(100vw - 12px);
+  max-height:min(72vh,560px);
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:5px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:9px;
+  background:#191e27;
+  box-shadow:0 18px 50px rgba(0,0,0,.52);
+  color:#e6ebf2;
+  font:13px Inter,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
+}
+.rw-context-item{
+  width:100%;
+  height:30px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 10px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  cursor:default;
+}
+.rw-context-item:hover:not(:disabled),
+.rw-context-item:focus-visible:not(:disabled){
+  outline:none;
+  background:#253047;
+}
+.rw-context-item:disabled{
+  opacity:.38;
+}
+.rw-context-item.danger{
+  color:#ff8da1!important;
+}
+.rw-context-label{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.rw-context-shortcut{
+  margin-left:auto;
+  flex:none;
+  color:#8c95a5;
+  white-space:nowrap;
+}
+.rw-context-separator{
+  height:1px;
+  margin:4px 7px;
+  background:rgba(255,255,255,.12);
 }
