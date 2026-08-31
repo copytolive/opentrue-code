@@ -6,7 +6,7 @@ const MAX_AI_REPLY_BYTES = 1024 * 1024;
 function providerFromUrl(url) {
   try {
     const host = new URL(url).hostname.toLowerCase();
-    if (host === 'chatgpt.com' || host.endsWith('.chatgpt.com')) return 'ChatGPT';
+    if (host === 'chatgpt.com' || host.endsWith('.chatgpt.com') || host === 'chat.openai.com') return 'ChatGPT';
     if (host === 'claude.ai' || host.endsWith('.claude.ai')) return 'Claude';
     if (host === 'gemini.google.com') return 'Gemini';
   } catch {}
@@ -14,20 +14,20 @@ function providerFromUrl(url) {
 }
 
 function buildPrompt(relativePath, content, instruction) {
-  const task = String(instruction || '').trim() || 'Read this local file and explain the important points.';
+  const task = String(instruction || '').trim() || 'Read this local file carefully and use it as the source for my next request.';
   return [
-    'RWACode LOCAL FILE CONTEXT',
+    '[RWACode LOCAL FILE CONTEXT]',
     `Selected file: ${relativePath}`,
     '',
     `User instruction: ${task}`,
     '',
-    'Security boundary: you are receiving only the selected file content. You do not have direct filesystem access.',
-    'If the instruction asks you to modify the file, return the COMPLETE replacement file contents in exactly one fenced code block. Do not return a partial patch.',
-    'If the instruction only asks for analysis, answer normally.',
+    'Security boundary: you are receiving only this explicitly selected file. You do not have direct filesystem access.',
+    'If asked to modify it, return the COMPLETE replacement file contents in exactly one fenced code block.',
+    'Do not claim that you read any other local file unless the user explicitly sends it.',
     '',
-    `<rwacode_file path="${relativePath}">`,
+    `--- BEGIN ${relativePath} ---`,
     content,
-    '</rwacode_file>',
+    `--- END ${relativePath} ---`,
   ].join('\n');
 }
 
@@ -48,45 +48,51 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
 
     const script = `(() => {
       const prompt = ${JSON.stringify(prompt)};
-      const host = location.hostname.toLowerCase();
-      const provider = host.includes('chatgpt.com') ? 'ChatGPT' : host.includes('claude.ai') ? 'Claude' : host === 'gemini.google.com' ? 'Gemini' : null;
-      if (!provider) return { ok:false, error:'unsupported provider page' };
+      const provider = ${JSON.stringify(provider)};
       const selectors = provider === 'ChatGPT'
-        ? ['#prompt-textarea','[data-testid="prompt-textarea"]','textarea','[contenteditable="true"]']
+        ? ['#prompt-textarea','[data-testid="prompt-textarea"]','textarea[data-testid*="prompt"]','textarea']
         : provider === 'Claude'
-          ? ['[data-testid="chat-input"]','div.ProseMirror[contenteditable="true"]','[contenteditable="true"]','textarea']
-          : ['rich-textarea [contenteditable="true"]','.ql-editor[contenteditable="true"]','[contenteditable="true"]','textarea'];
-      const input = selectors.map((s) => document.querySelector(s)).find(Boolean);
+          ? ['[data-testid="chat-input"]','div.ProseMirror[contenteditable="true"]','div[contenteditable="true"][data-testid*="input"]','div[contenteditable="true"]','textarea']
+          : ['rich-textarea .ql-editor','.ql-editor[contenteditable="true"]','div[contenteditable="true"][role="textbox"]','div[contenteditable="true"]','textarea'];
+      const input = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
       if (!input) return { ok:false, provider, error:'composer not found' };
+
       input.focus();
+      const existing = 'value' in input ? input.value : (input.innerText || input.textContent || '');
+      const combined = existing.trim() ? existing + '\\n\\n' + prompt : prompt;
+
       if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
         const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-        if (setter) setter.call(input, prompt); else input.value = prompt;
+        if (setter) setter.call(input, combined); else input.value = combined;
         input.dispatchEvent(new Event('input', { bubbles:true }));
         input.dispatchEvent(new Event('change', { bubbles:true }));
       } else {
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.execCommand('insertText', false, prompt);
-        input.dispatchEvent(new InputEvent('input', { bubbles:true, inputType:'insertText', data:prompt }));
+        input.focus();
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.execCommand('insertText', false, combined);
+        } catch {
+          input.textContent = combined;
+        }
+        try {
+          input.dispatchEvent(new InputEvent('input', { bubbles:true, inputType:'insertText', data:combined }));
+        } catch {
+          input.dispatchEvent(new Event('input', { bubbles:true }));
+        }
       }
-      const sendSelectors = provider === 'ChatGPT'
-        ? ['[data-testid="send-button"]','button[aria-label*="Send"]','button[aria-label*="Kirim"]']
-        : provider === 'Claude'
-          ? ['button[aria-label*="Send"]','button[aria-label*="Kirim"]','button[data-testid*="send"]']
-          : ['button[aria-label*="Send"]','button[aria-label*="Kirim"]','button.send-button'];
-      const send = sendSelectors.map((s) => document.querySelector(s)).find((el) => el && !el.disabled);
-      if (send) { send.click(); return { ok:true, provider, submitted:true }; }
-      return { ok:true, provider, submitted:false, error:'context inserted; send button was not detected' };
+
+      input.focus();
+      return { ok:true, provider, inserted:true, submitted:false };
     })()`;
 
     const result = await wc.executeJavaScript(script, true);
-    if (!result?.ok) throw new Error(result?.error || 'could not send file context');
-    return { provider, path: file.path, size: file.size, submitted: Boolean(result.submitted), note: result.error || null };
+    if (!result?.ok) throw new Error(result?.error || 'could not insert local file context');
+    return { provider, path: file.path, size: file.size, inserted: true, submitted: false };
   }
 
   async function readReply() {
@@ -96,8 +102,7 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     if (!provider) throw new Error('active tab must be ChatGPT, Claude, or Gemini');
 
     const script = `(() => {
-      const host = location.hostname.toLowerCase();
-      const provider = host.includes('chatgpt.com') ? 'ChatGPT' : host.includes('claude.ai') ? 'Claude' : host === 'gemini.google.com' ? 'Gemini' : null;
+      const provider = ${JSON.stringify(provider)};
       const selectors = provider === 'ChatGPT'
         ? ['[data-message-author-role="assistant"]','article[data-testid^="conversation-turn"] .markdown','article .markdown']
         : provider === 'Claude'
