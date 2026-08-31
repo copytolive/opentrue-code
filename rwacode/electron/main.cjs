@@ -17,10 +17,13 @@ let profileStore;
 let profiles = [];
 let activeProfileId;
 let activeTabId;
-let browserBounds = { x: 292, y: 142, width: 900, height: 700 };
-let previewBounds = { x: 1200, y: 180, width: 420, height: 420 };
+let browserBounds = { x: 248, y: 142, width: 960, height: 700 };
+let previewBounds = { x: 1210, y: 180, width: 320, height: 420 };
+let browserVisible = true;
 let previewView = null;
 let previewLoaded = false;
+let workspaceWatcher = null;
+let watchTimer = null;
 const tabs = new Map();
 
 function safeId(input, fallback = 'profile') {
@@ -90,11 +93,11 @@ function emitTabs() {
 function hideAllTabs() { for (const tab of tabs.values()) tab.view.setVisible(false); }
 function showActiveTab() {
   hideAllTabs();
+  if (!browserVisible) return;
   const tab = tabs.get(activeTabId);
   if (!tab || tab.profileId !== activeProfileId || tab.requestedUrl === HOME_URL) return;
   tab.view.setBounds(browserBounds);
   tab.view.setVisible(true);
-  tab.view.webContents.focus();
 }
 function secureWebContents(wc, ses) {
   wc.setWindowOpenHandler(() => ({
@@ -171,8 +174,11 @@ async function listDirectory(relativePath = '.') {
   if (!stat.isDirectory()) throw new Error('not a directory');
   const entries = await fsp.readdir(target, { withFileTypes: true });
   const results = [];
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.name === '.git') continue;
+  for (const entry of entries.sort((a, b) => {
+    if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  })) {
+    if (entry.name === '.git' || entry.name === '.DS_Store') continue;
     const absolute = path.join(target, entry.name);
     try {
       const real = fs.realpathSync.native(absolute);
@@ -187,7 +193,7 @@ async function readTextFile(relativePath) {
   const stat = await fsp.stat(target);
   if (!stat.isFile()) throw new Error('not a file');
   if (stat.size > MAX_TEXT_BYTES) throw new Error('file too large');
-  return { path: relativePath, content: await fsp.readFile(target, 'utf8'), size: stat.size };
+  return { path: path.relative(guard.root, target), content: await fsp.readFile(target, 'utf8'), size: stat.size };
 }
 async function writeTextFile(relativePath, content) {
   const bytes = Buffer.byteLength(String(content), 'utf8');
@@ -217,6 +223,27 @@ async function deleteEntry(relativePath) {
   if (target === guard.root) throw new Error('cannot delete root');
   await fsp.rm(target, { recursive: true, force: false });
   return { deleted: relativePath };
+}
+function startWorkspaceWatcher() {
+  if (workspaceWatcher) return;
+  try {
+    workspaceWatcher = fs.watch(guard.root, { recursive: true }, (eventType, filename) => {
+      clearTimeout(watchTimer);
+      watchTimer = setTimeout(() => {
+        const relativePath = filename ? String(filename) : '';
+        send('fs:changed', { eventType, path: relativePath, at: Date.now() });
+      }, 120);
+    });
+    workspaceWatcher.on('error', (error) => send('fs:watch-error', { message: error.message }));
+  } catch (error) {
+    send('fs:watch-error', { message: error.message });
+  }
+}
+function stopWorkspaceWatcher() {
+  clearTimeout(watchTimer);
+  watchTimer = null;
+  if (workspaceWatcher) workspaceWatcher.close();
+  workspaceWatcher = null;
 }
 function ensurePreviewView() {
   if (previewView) return previewView;
@@ -298,6 +325,7 @@ function registerIpc() {
   ipcMain.handle('browser:home', async () => { const tab = tabs.get(activeTabId); if (tab) { tab.requestedUrl = HOME_URL; await tab.view.webContents.loadURL('about:blank'); showActiveTab(); emitTabs(); } });
   ipcMain.handle('browser:openExternal', async (_event, value) => { const url = normalizeUrl(value); if (/^https?:/i.test(url)) await shell.openExternal(url); return { url }; });
   ipcMain.handle('browser:setBounds', async (_event, bounds) => { browserBounds = clampBounds(bounds); showActiveTab(); return browserBounds; });
+  ipcMain.handle('browser:setVisible', async (_event, visible) => { browserVisible = Boolean(visible); showActiveTab(); return { visible: browserVisible }; });
 
   ipcMain.handle('fs:list', async (_event, relativePath = '.') => listDirectory(relativePath));
   ipcMain.handle('fs:read', async (_event, relativePath) => readTextFile(relativePath));
@@ -325,7 +353,7 @@ async function createWindow() {
   profileStore = path.join(app.getPath('userData'), 'profiles.json');
   await loadProfiles();
   mainWindow = new BrowserWindow({
-    title: 'RWACode', width: 1728, height: 1080, minWidth: 1180, minHeight: 760, backgroundColor: '#07090d',
+    title: 'RWACode', width: 1728, height: 1080, minWidth: 1100, minHeight: 720, backgroundColor: '#07090d',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
   });
@@ -333,8 +361,10 @@ async function createWindow() {
   await mainWindow.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
   createTab(activeProfileId, HOME_URL, true);
   ensurePreviewView();
+  startWorkspaceWatcher();
   mainWindow.on('resize', () => send('window:resized'));
   mainWindow.on('closed', () => {
+    stopWorkspaceWatcher();
     for (const tab of tabs.values()) if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     tabs.clear();
     if (previewView && !previewView.webContents.isDestroyed()) previewView.webContents.close();
