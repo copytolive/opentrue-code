@@ -43,7 +43,8 @@ contextBridge.exposeInMainWorld('rwacode', {
     onWatchError: (handler) => ipcRenderer.on('fs:watch-error', (_event, state) => handler(state)),
   },
   ai: {
-    sendContext: (relativePath, content, instruction) => ipcRenderer.invoke('ai:sendContext', relativePath, content, instruction),
+    sendFile: (relativePath, instruction) => ipcRenderer.invoke('ai:sendFile', relativePath, instruction),
+    readReply: () => ipcRenderer.invoke('ai:readReply'),
   },
   preview: {
     setBounds: (bounds) => ipcRenderer.invoke('preview:setBounds', bounds),
