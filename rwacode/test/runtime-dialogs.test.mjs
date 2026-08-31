@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
+const workspace = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
 const executableSource = source.replace(/^\s*\/\/.*$/gm, '');
 
-test('Electron prompt replacement uses an in-app async dialog', () => {
+test('Electron prompt replacement remains available for file naming and destructive confirmations', () => {
   assert.match(source, /rw-dialog-backdrop/);
   assert.match(source, /function uiPrompt\(/);
   assert.match(source, /function uiConfirm\(/);
@@ -14,16 +15,16 @@ test('Electron prompt replacement uses an in-app async dialog', () => {
   assert.doesNotMatch(executableSource, /window\.confirm\(/);
 });
 
-test('Send to AI asks before revealing the provider and inserts only selected file context', () => {
-  assert.match(source, /async function sendFileToActiveAi\(/);
-  assert.match(source, /Only this file will be shared/);
-  assert.match(source, /await uiPrompt\(/);
-  assert.match(source, /await closeEditor\(false\)/);
-  assert.match(source, /api\.ai\.sendFile\(target, instruction\)/);
-  assert.match(source, /press Send manually/);
+test('primary selected-file AI action bypasses the Send-to-AI modal and routes straight to the composer', () => {
+  assert.match(workspace, /async function directSendSelectedFile\(/);
+  assert.match(workspace, /const provider = await routeToAiProvider\(\)/);
+  assert.match(workspace, /await api\.ai\.sendFile\(target, instruction\)/);
+  assert.match(workspace, /stopImmediatePropagation\(\)/);
+  assert.match(workspace, /editorSend\.onclick = directSendSelectedFile/);
+  assert.doesNotMatch(workspace, /await uiPrompt\(/);
 });
 
-test('file and profile text-entry actions are routed through the in-app dialog', () => {
+test('file and profile text-entry actions still use the in-app dialog fallback', () => {
   assert.match(source, /fileAction = async function patchedFileAction/);
   assert.match(source, /New file name/);
   assert.match(source, /New folder name/);

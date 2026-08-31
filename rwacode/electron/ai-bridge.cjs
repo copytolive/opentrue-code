@@ -40,15 +40,77 @@ function extractSingleReplacement(text) {
   return blocks[0][1].replace(/\n$/, '');
 }
 
+async function installProviderCosmetics(wc, provider) {
+  if (!wc || wc.isDestroyed() || provider !== 'ChatGPT') return false;
+  const script = `(() => {
+    const installKey = '__rwacodeCosmeticsInstalled';
+    const hideWorkPromo = () => {
+      const titlePatterns = [
+        'kenali chatgpt work',
+        'meet chatgpt work',
+        'discover chatgpt work',
+        'introducing chatgpt work'
+      ];
+      const actionPatterns = [
+        'lihat kemampuan work',
+        'sesuaikan work untuk saya',
+        'see work capabilities',
+        'customize work for me'
+      ];
+      const nodes = Array.from(document.querySelectorAll('h1,h2,h3,h4,p,span,div'));
+      for (const node of nodes) {
+        const own = (node.innerText || node.textContent || '').trim().toLowerCase();
+        if (!own || !titlePatterns.some((pattern) => own.includes(pattern))) continue;
+        let candidate = node;
+        for (let depth = 0; candidate && depth < 8; depth += 1, candidate = candidate.parentElement) {
+          const text = (candidate.innerText || candidate.textContent || '').trim().toLowerCase();
+          const actionHits = actionPatterns.filter((pattern) => text.includes(pattern)).length;
+          const hasComposer = !!candidate.querySelector('textarea,[contenteditable="true"][role="textbox"],#prompt-textarea');
+          if (!hasComposer && text.length < 1800 && (actionHits >= 1 || candidate.querySelectorAll('button').length >= 2)) {
+            candidate.style.setProperty('display', 'none', 'important');
+            candidate.dataset.rwacodeCosmetic = 'chatgpt-work-promo';
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    hideWorkPromo();
+    if (!window[installKey]) {
+      window[installKey] = true;
+      const observer = new MutationObserver(() => hideWorkPromo());
+      observer.observe(document.documentElement, { childList:true, subtree:true });
+    }
+    return true;
+  })()`;
+  try {
+    await wc.executeJavaScript(script, true);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function createAiBridge({ getActiveWebContents, readTextFile }) {
   if (typeof getActiveWebContents !== 'function') throw new Error('getActiveWebContents is required');
   if (typeof readTextFile !== 'function') throw new Error('readTextFile is required');
+
+  // Fixed, allowlisted cosmetic pass. This does not expose a generic execute primitive to the renderer.
+  // Re-running is cheap: each provider page installs its own MutationObserver only once per navigation.
+  const cosmeticTimer = setInterval(() => {
+    const wc = getActiveWebContents();
+    if (!wc || wc.isDestroyed()) return;
+    const provider = providerFromUrl(wc.getURL());
+    if (provider) installProviderCosmetics(wc, provider).catch(() => {});
+  }, 1200);
+  cosmeticTimer.unref?.();
 
   async function sendFile(relativePath, instruction) {
     const wc = getActiveWebContents();
     if (!wc || wc.isDestroyed()) throw new Error('no active browser tab');
     const provider = providerFromUrl(wc.getURL());
     if (!provider) throw new Error('active tab must be ChatGPT, Claude, or Gemini');
+    await installProviderCosmetics(wc, provider);
 
     const file = await readTextFile(relativePath);
     const bytes = Buffer.byteLength(file.content, 'utf8');
@@ -116,6 +178,7 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     if (!wc || wc.isDestroyed()) throw new Error('no active browser tab');
     const provider = providerFromUrl(wc.getURL());
     if (!provider) throw new Error('active tab must be ChatGPT, Claude, or Gemini');
+    await installProviderCosmetics(wc, provider);
 
     const script = `(() => {
       const provider = ${JSON.stringify(provider)};
@@ -171,6 +234,7 @@ module.exports = {
   providerFromUrl,
   buildPrompt,
   extractSingleReplacement,
+  installProviderCosmetics,
   MAX_AI_CONTEXT_BYTES,
   MAX_AI_REPLY_BYTES,
 };
