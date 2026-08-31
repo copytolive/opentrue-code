@@ -27,11 +27,21 @@ test('path guard allows files inside root and rejects read/write escape attempts
 });
 
 test('external browser webContents stay sandboxed and Node-free', () => {
-  const source = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../electron/main-v2.cjs', import.meta.url), 'utf8');
   assert.match(source, /sandbox:\s*true/);
   assert.match(source, /contextIsolation:\s*true/);
   assert.match(source, /nodeIntegration:\s*false/);
   assert.doesNotMatch(source, /http\.createServer|express\(|fastify\(|listen\(/);
+});
+
+test('local AI bridge is root-locked and provider-allowlisted', () => {
+  const source = fs.readFileSync(new URL('../electron/main-v2.cjs', import.meta.url), 'utf8');
+  assert.match(source, /guard\.resolveExisting\(relativePath\)/);
+  assert.match(source, /MAX_AI_CONTEXT_BYTES/);
+  assert.match(source, /chatgpt\.com/);
+  assert.match(source, /claude\.ai/);
+  assert.match(source, /gemini\.google\.com/);
+  assert.match(source, /submitted: false/);
 });
 
 test('preload exposes only explicit allowlisted IPC methods', () => {
