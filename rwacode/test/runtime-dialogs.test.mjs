@@ -8,7 +8,7 @@ test('Electron prompt replacement uses an in-app async dialog', () => {
   assert.match(source, /rw-dialog-backdrop/);
   assert.match(source, /function uiPrompt\(/);
   assert.match(source, /function uiConfirm\(/);
-  assert.match(source, /api\.browser\.setVisible\(false\)/);
+  assert.match(source, /await setBrowserVisible\(false\)/);
   assert.doesNotMatch(source, /window\.prompt\(/);
   assert.doesNotMatch(source, /window\.confirm\(/);
 });
