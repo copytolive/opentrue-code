@@ -4,9 +4,8 @@ minVersion = "8.30.1"
 [extend]
 useDefault = true
 
-# Keep the default Gitleaks rules. Only suppress the repository-owned values that
-# are deliberately synthetic examples/test fixtures. A real credential in the
-# same files still fails because it will not match one of these value prefixes.
+# Keep the default Gitleaks rules. Only suppress repository-owned values that are
+# deliberately synthetic examples/test fixtures. Real credentials remain blocked.
 [[allowlists]]
 description = "Synthetic placeholder and CI-only credentials"
 targetRules = ["generic-api-key"]
@@ -15,4 +14,15 @@ regexes = [
   '''(?i)(?:password|secret|token|key)\s*[:=]\s*["']?replace-with-[a-z0-9-]+["']?''',
   '''(?i)(?:password|secret|token|key)\s*[:=]\s*["']?test-[a-z0-9-]+["']?''',
   '''(?i)(?:password|secret|token|key)\s*[:=]\s*["']?smoke-[a-z0-9-]+["']?'''
+]
+
+# Historical TapeOut source contains the public WBNB BNB Chain contract address.
+# This exact indented source line is not a credential. Keep the exception line-
+# exact so any other generic-api-key finding continues to fail closed.
+[[allowlists]]
+description = "Exact public WBNB contract default in historical TapeOut adapter"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = [
+  '''^\s*wbnb=os\.environ\.get\("WBNB_TOKEN_ADDRESS","0xbb4CdB9CBd36B01d1cBaEBF2De08d9173bc095c"\)\.strip\(\)\s*$'''
 ]

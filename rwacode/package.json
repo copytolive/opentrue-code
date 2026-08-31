@@ -1,0 +1,42 @@
+{
+  "name": "rwacode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RWACode browser-first local developer workspace",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check src/renderer.js && node --check src/browser-menu.js",
+    "build:mac": "electron-builder --mac dmg zip --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.rwacode.desktop",
+    "productName": "RWACode",
+    "files": [
+      "electron/**/*",
+      "lib/**/*",
+      "src/**/*",
+      "package.json",
+      "LICENSES/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {"target": "dmg", "arch": ["x64"]},
+        {"target": "zip", "arch": ["x64"]}
+      ],
+      "identity": null
+    },
+    "dmg": {
+      "title": "RWACode ${version}"
+    }
+  }
+}
