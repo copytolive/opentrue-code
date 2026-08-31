@@ -2,6 +2,7 @@
 
 (() => {
   const api = window.rwacode;
+  const rootElement = document.documentElement;
   const fileActions = document.getElementById('fileActions');
   const fileTree = document.getElementById('fileTree');
   const address = document.getElementById('addressInput');
@@ -27,6 +28,46 @@
   function setStatus(message) {
     try { status(message); } catch {}
   }
+
+  function cssPx(variable, fallback) {
+    const value = Number.parseFloat(getComputedStyle(rootElement).getPropertyValue(variable));
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function constrainRailWidths() {
+    const viewport = Math.max(1000, window.innerWidth || 0);
+    const minCenter = viewport < 1220 ? 460 : 520;
+    const filesMin = 280;
+    const rightMin = 320;
+    const filesCap = viewport < 1450 ? 350 : 500;
+    const rightCap = viewport < 1450 ? 400 : 560;
+    let filesWidth = Math.min(filesCap, Math.max(filesMin, cssPx('--files-w', 370)));
+    let rightWidth = Math.min(rightCap, Math.max(rightMin, cssPx('--right-w', 416)));
+    const sideBudget = Math.max(filesMin + rightMin, viewport - minCenter);
+
+    if (filesWidth + rightWidth > sideBudget) {
+      let overflow = filesWidth + rightWidth - sideBudget;
+      const rightRoom = Math.max(0, rightWidth - rightMin);
+      const rightShrink = Math.min(overflow, rightRoom);
+      rightWidth -= rightShrink;
+      overflow -= rightShrink;
+      if (overflow > 0) filesWidth = Math.max(filesMin, filesWidth - overflow);
+    }
+
+    rootElement.style.setProperty('--files-w', `${Math.round(filesWidth)}px`);
+    rootElement.style.setProperty('--right-w', `${Math.round(rightWidth)}px`);
+    try {
+      localStorage.setItem('rwacode:files-width', String(Math.round(filesWidth)));
+      localStorage.setItem('rwacode:right-width', String(Math.round(rightWidth)));
+    } catch {}
+  }
+
+  constrainRailWidths();
+  let railFrame = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(railFrame);
+    railFrame = requestAnimationFrame(constrainRailWidths);
+  });
 
   async function promptText(title, value = '', message = '') {
     if (window.rwacodeDialogs?.prompt) return window.rwacodeDialogs.prompt(title, value, message);
