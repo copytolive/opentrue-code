@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>RWACode</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./bridge.css" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -48,6 +49,8 @@
         <div id="fileBreadcrumb" class="file-breadcrumb panel-content">./</div>
         <div id="fileSearch" class="file-search panel-content hidden"><input id="fileSearchInput" placeholder="Filter current folder…" /></div>
         <div id="fileActions" class="file-actions panel-content hidden">
+          <button data-action="ai-send" class="ai-action">Send selected file to AI</button>
+          <button data-action="ai-import" class="ai-action secondary">Import latest AI reply</button>
           <button data-action="new-file">New file</button><button data-action="new-folder">New folder</button><button data-action="reveal">Reveal selected</button><button data-action="rename">Rename</button><button data-action="delete" class="danger">Delete</button>
         </div>
         <div id="fileTree" class="file-tree panel-content"></div>
@@ -60,6 +63,7 @@
           <button id="reloadButton" class="nav-button" title="Reload">↻</button>
           <button id="homeButton" class="nav-button" title="New tab">⌂</button>
           <div class="address-wrap"><span class="address-lock">◆</span><input id="addressInput" class="address-input" value="rwacode://newtab" spellcheck="false" /><span class="partition-badge">PROFILE ISOLATED</span></div>
+          <span id="aiBridgeBadge" class="bridge-badge">AI BRIDGE READY</span>
           <button id="openExternalButton" class="nav-button" title="Open current URL externally">↗</button>
           <button id="browserMenuButton" class="nav-button" title="Browser menu">⋯</button>
         </div>
@@ -86,6 +90,17 @@
             <textarea id="editorText" spellcheck="false"></textarea>
             <footer class="editor-foot"><span id="editorMeta"></span><span class="grow"></span><button id="editorSaveButton" class="primary">Save</button></footer>
           </section>
+          <section id="proposalPanel" class="proposal-panel hidden" aria-label="AI replacement review">
+            <header class="proposal-head">
+              <div class="proposal-title"><span class="kicker">AI PROPOSAL</span><strong id="proposalPath">File</strong><small id="proposalProvider">Provider</small></div>
+              <span class="grow"></span>
+              <button id="proposalCancelButton" class="cancel">Cancel</button>
+              <button id="proposalApplyButton" class="primary">Apply replacement</button>
+            </header>
+            <div id="proposalMeta" class="proposal-meta">Review the complete replacement before applying it.</div>
+            <textarea id="proposalText" spellcheck="false"></textarea>
+            <footer class="proposal-foot"><span class="bridge-status">Explicit approval required · root locked write</span><span class="grow"></span><button id="proposalRevealButton">Reveal original</button></footer>
+          </section>
         </div>
       </section>
 
@@ -106,6 +121,7 @@
             <div><b>Session isolation</b><span>PERSISTENT</span></div>
             <div><b>Native file bridge</b><span>ROOT LOCKED</span></div>
             <div><b>File synchronization</b><span id="signalFileSync">LIVE</span></div>
+            <div><b>Selective AI bridge</b><span id="signalAiBridge">READY</span></div>
             <div><b>Preview channel</b><span id="signalPreview">IDLE</span></div>
             <div><b>HTTP control API</b><span class="muted">ABSENT</span></div>
             <div><b>External web Node access</b><span class="muted">DENIED</span></div>

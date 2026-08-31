@@ -11,6 +11,7 @@ const invokeChannels = [
   'browser:newTab', 'browser:switchTab', 'browser:closeTab', 'browser:navigate', 'browser:back',
   'browser:forward', 'browser:reload', 'browser:home', 'browser:openExternal', 'browser:setBounds', 'browser:setVisible',
   'fs:list', 'fs:read', 'fs:write', 'fs:create', 'fs:rename', 'fs:delete', 'fs:reveal', 'dialog:confirmDelete',
+  'ai:sendFile', 'ai:readReply',
   'preview:setBounds', 'preview:load', 'preview:reload', 'preview:openExternal',
 ];
 
@@ -26,6 +27,13 @@ test('event-only file synchronization bridge is explicit and one-way', () => {
   assert.match(preload, /ipcRenderer\.on\('fs:watch-error'/);
   assert.match(main, /send\('fs:changed'/);
   assert.match(main, /send\('fs:watch-error'/);
+});
+
+test('AI IPC surface is narrow and has no generic execute primitive', () => {
+  assert.match(preload, /sendFile: \(relativePath, instruction\).*'ai:sendFile'/s);
+  assert.match(preload, /readReply: \(\) => ipcRenderer\.invoke\('ai:readReply'\)/);
+  assert.doesNotMatch(preload, /ai:execute|executeJavaScript|eval\(/);
+  assert.doesNotMatch(main, /ipcMain\.handle\(['"]ai:execute/);
 });
 
 test('external web views remain sandboxed and Node-free', () => {

@@ -6,6 +6,7 @@ const fsp = fs.promises;
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createPathGuard } = require('../lib/path-guard.cjs');
+const { createAiBridge } = require('./ai-bridge.cjs');
 
 const CANONICAL_ROOT = '/Users/Shared/WorkspaceBersama/rwa.ms/chat-local-online';
 const HOME_URL = 'rwacode://newtab';
@@ -24,6 +25,7 @@ let previewView = null;
 let previewLoaded = false;
 let workspaceWatcher = null;
 let watchTimer = null;
+let aiBridge = null;
 const tabs = new Map();
 
 function safeId(input, fallback = 'profile') {
@@ -83,6 +85,7 @@ function tabSnapshot(tab) {
     canGoForward: !isHome && wc.navigationHistory.canGoForward(),
   };
 }
+function activeWebContents() { return tabs.get(activeTabId)?.view.webContents || null; }
 function emitTabs() {
   send('browser:tabs', {
     activeTabId,
@@ -245,6 +248,10 @@ function stopWorkspaceWatcher() {
   if (workspaceWatcher) workspaceWatcher.close();
   workspaceWatcher = null;
 }
+
+function emitPreviewState(state, extra = {}) {
+  send('preview:state', { state, url: previewView?.webContents.getURL() || '', loading: state === 'LOADING', ...extra });
+}
 function ensurePreviewView() {
   if (previewView) return previewView;
   const ses = session.fromPartition('persist:rwacode-preview', { cache: true });
@@ -254,8 +261,17 @@ function ensurePreviewView() {
   previewView.setBounds(previewBounds);
   previewView.setVisible(false);
   secureWebContents(previewView.webContents, ses);
-  previewView.webContents.on('did-stop-loading', () => send('preview:state', { url: previewView.webContents.getURL(), loading: false }));
-  previewView.webContents.on('did-start-loading', () => send('preview:state', { url: previewView.webContents.getURL(), loading: true }));
+  previewView.webContents.on('did-start-loading', () => {
+    if (previewLoaded) emitPreviewState('LOADING');
+  });
+  previewView.webContents.on('did-stop-loading', () => {
+    const url = previewView.webContents.getURL();
+    if (!previewLoaded || !url || url === 'about:blank') emitPreviewState('IDLE');
+    else emitPreviewState('LIVE');
+  });
+  previewView.webContents.on('did-fail-load', (_event, code, description, validatedURL, isMainFrame) => {
+    if (previewLoaded && isMainFrame) emitPreviewState('ERROR', { code, description, url: validatedURL });
+  });
   previewView.webContents.loadURL('about:blank');
   return previewView;
 }
@@ -319,8 +335,8 @@ function registerIpc() {
     if (url === HOME_URL) await tab.view.webContents.loadURL('about:blank'); else await tab.view.webContents.loadURL(url);
     showActiveTab(); emitTabs(); return { url };
   });
-  ipcMain.handle('browser:back', async () => { const wc = tabs.get(activeTabId)?.view.webContents; if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack(); });
-  ipcMain.handle('browser:forward', async () => { const wc = tabs.get(activeTabId)?.view.webContents; if (wc?.navigationHistory.canGoForward()) wc.navigationHistory.goForward(); });
+  ipcMain.handle('browser:back', async () => { const wc = activeWebContents(); if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack(); });
+  ipcMain.handle('browser:forward', async () => { const wc = activeWebContents(); if (wc?.navigationHistory.canGoForward()) wc.navigationHistory.goForward(); });
   ipcMain.handle('browser:reload', async () => { const tab = tabs.get(activeTabId); if (tab && tab.requestedUrl !== HOME_URL) tab.view.webContents.reload(); });
   ipcMain.handle('browser:home', async () => { const tab = tabs.get(activeTabId); if (tab) { tab.requestedUrl = HOME_URL; await tab.view.webContents.loadURL('about:blank'); showActiveTab(); emitTabs(); } });
   ipcMain.handle('browser:openExternal', async (_event, value) => { const url = normalizeUrl(value); if (/^https?:/i.test(url)) await shell.openExternal(url); return { url }; });
@@ -339,12 +355,17 @@ function registerIpc() {
     return result.response === 1;
   });
 
+  ipcMain.handle('ai:sendFile', async (_event, relativePath, instruction) => aiBridge.sendFile(relativePath, instruction));
+  ipcMain.handle('ai:readReply', async () => aiBridge.readReply());
+
   ipcMain.handle('preview:setBounds', async (_event, bounds) => { previewBounds = clampBounds(bounds); if (previewView) previewView.setBounds(previewBounds); return previewBounds; });
   ipcMain.handle('preview:load', async (_event, value) => {
     const url = normalizeUrl(value); if (url === HOME_URL) throw new Error('preview requires a URL');
-    const view = ensurePreviewView(); previewLoaded = true; view.setBounds(previewBounds); view.setVisible(true); await view.webContents.loadURL(url); return { url };
+    const view = ensurePreviewView(); previewLoaded = true; view.setBounds(previewBounds); view.setVisible(true); emitPreviewState('LOADING', { url });
+    await view.webContents.loadURL(url);
+    return { url };
   });
-  ipcMain.handle('preview:reload', async () => { if (previewLoaded) ensurePreviewView().webContents.reload(); });
+  ipcMain.handle('preview:reload', async () => { if (previewLoaded) { emitPreviewState('LOADING'); ensurePreviewView().webContents.reload(); } });
   ipcMain.handle('preview:openExternal', async () => { const url = ensurePreviewView().webContents.getURL(); if (/^https?:/i.test(url)) await shell.openExternal(url); return { url }; });
 }
 
@@ -361,14 +382,16 @@ async function createWindow() {
   await mainWindow.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
   createTab(activeProfileId, HOME_URL, true);
   ensurePreviewView();
+  aiBridge = createAiBridge({ getActiveWebContents: activeWebContents, readTextFile });
   startWorkspaceWatcher();
+  emitPreviewState('IDLE');
   mainWindow.on('resize', () => send('window:resized'));
   mainWindow.on('closed', () => {
     stopWorkspaceWatcher();
     for (const tab of tabs.values()) if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     tabs.clear();
     if (previewView && !previewView.webContents.isDestroyed()) previewView.webContents.close();
-    previewView = null; previewLoaded = false; mainWindow = null;
+    previewView = null; previewLoaded = false; aiBridge = null; mainWindow = null;
   });
 }
 

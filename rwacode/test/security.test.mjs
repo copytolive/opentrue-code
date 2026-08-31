@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createPathGuard } = require('../lib/path-guard.cjs');
+const { providerFromUrl, buildPrompt, extractSingleReplacement, MAX_AI_CONTEXT_BYTES } = require('../electron/ai-bridge.cjs');
 
 test('path guard allows files inside root and rejects read/write escape attempts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-root-'));
@@ -34,8 +35,36 @@ test('external browser webContents stay sandboxed and Node-free', () => {
   assert.doesNotMatch(source, /http\.createServer|express\(|fastify\(|listen\(/);
 });
 
+test('local AI bridge is provider-allowlisted and bounded', () => {
+  assert.equal(providerFromUrl('https://chatgpt.com/'), 'ChatGPT');
+  assert.equal(providerFromUrl('https://claude.ai/new'), 'Claude');
+  assert.equal(providerFromUrl('https://gemini.google.com/app'), 'Gemini');
+  assert.equal(providerFromUrl('https://example.com/'), null);
+  assert.equal(MAX_AI_CONTEXT_BYTES, 256 * 1024);
+  const prompt = buildPrompt('demo.txt', 'hello', 'review');
+  assert.match(prompt, /Selected file: demo\.txt/);
+  assert.match(prompt, /Security boundary: you are receiving only this explicitly selected file/);
+});
+
+test('AI replacement import requires exactly one fenced code block', () => {
+  assert.equal(extractSingleReplacement('before\n```txt\nhello\n```\nafter'), 'hello');
+  assert.throws(() => extractSingleReplacement('plain response'), /exactly one fenced replacement/);
+  assert.throws(() => extractSingleReplacement('```\na\n```\n```\nb\n```'), /exactly one fenced replacement/);
+});
+
+test('AI bridge can only read through the existing root-locked file reader and never auto-submits', () => {
+  const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+  const bridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
+  assert.match(main, /const target = guard\.resolveExisting\(relativePath\)/);
+  assert.match(main, /createAiBridge\(\{ getActiveWebContents: activeWebContents, readTextFile \}\)/);
+  assert.match(bridge, /const file = await readTextFile\(relativePath\)/);
+  assert.match(bridge, /submitted:false/);
+  assert.doesNotMatch(bridge, /send\.click\(\)/);
+  assert.doesNotMatch(bridge, /require\(['"]node:fs['"]\)|require\(['"]fs['"]\)/);
+});
+
 test('preload exposes only explicit allowlisted IPC methods', () => {
   const source = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
   assert.match(source, /contextBridge\.exposeInMainWorld\('rwacode'/);
-  assert.doesNotMatch(source, /child_process|exec\(|spawn\(|require\(['"]fs['"]\)/);
+  assert.doesNotMatch(source, /child_process|exec\(|spawn\(|require\(['"]fs['"]\)|executeJavaScript/);
 });

@@ -7,6 +7,7 @@ const state = {
   root: '', profiles: [], activeProfileId: '', tabs: [], activeTabId: '',
   currentDir: '.', entries: [], selectedPath: null, editorPath: null, editorDirty: false,
   filter: '', previewLoaded: false, filesCollapsed: false, rightCollapsed: false, syncTimer: null,
+  proposalPath: null, proposalProvider: null,
 };
 
 function status(message) { $('statusMessage').textContent = message; }
@@ -25,6 +26,7 @@ function renderProfiles() {
     button.onclick = async () => {
       try {
         if (!(await closeEditor(true))) return;
+        if (state.proposalPath) await cancelProposal();
         const result = await api.profiles.activate(profile.id);
         state.activeProfileId = result.activeProfileId;
         $('profileMenu').classList.remove('open');
@@ -61,6 +63,7 @@ function renderTabs() {
     button.innerHTML = `<span class="tab-loading">${tab.loading ? '◌' : 'R'}</span><span class="tab-title">${esc(title)}</span><span class="tab-close" title="Close">×</span>`;
     button.onclick = async (event) => {
       if (!(await closeEditor(true))) return;
+      if (state.proposalPath) await cancelProposal();
       if (event.target.classList.contains('tab-close')) {
         event.stopPropagation();
         await api.browser.closeTab(tab.id);
@@ -79,7 +82,7 @@ function syncActiveTabUi() {
   $('addressInput').value = url;
   $('backButton').disabled = !tab?.canGoBack;
   $('forwardButton').disabled = !tab?.canGoForward;
-  const isHome = url === 'rwacode://newtab' && !state.editorPath;
+  const isHome = url === 'rwacode://newtab' && !state.editorPath && !state.proposalPath;
   $('newTabPage').classList.toggle('hidden', !isHome);
   updateBounds();
 }
@@ -118,6 +121,8 @@ function renderDirectory() {
     if (filter && !entry.name.toLowerCase().includes(filter)) continue;
     const row = document.createElement('div');
     row.className = `file-row ${state.selectedPath === entry.path ? 'selected' : ''}`;
+    row.dataset.path = entry.path;
+    row.dataset.type = entry.type;
     const icon = entry.type === 'directory' ? '▰' : entry.name.endsWith('.js') ? '●' : entry.name.endsWith('.ts') ? '◆' : entry.name.endsWith('.json') ? '◇' : '◫';
     row.innerHTML = `<span class="file-icon">${icon}</span><span class="file-name">${esc(entry.name)}</span><span class="file-path-hint">${entry.type === 'directory' ? 'folder' : 'file'}</span><button class="file-row-more" title="Select for file actions">⋯</button>`;
     row.onclick = async (event) => {
@@ -149,12 +154,15 @@ function renderDirectory() {
 
 async function openEditor(relativePath) {
   try {
+    if (state.proposalPath) await cancelProposal();
     if (!(await closeEditor(true))) return;
     const result = await api.files.read(relativePath);
+    state.selectedPath = result.path;
     state.editorPath = result.path;
     state.editorDirty = false;
     await api.browser.setVisible(false);
     $('newTabPage').classList.add('hidden');
+    $('proposalPanel').classList.add('hidden');
     $('editorPanel').classList.remove('hidden');
     $('editorTitle').textContent = result.path;
     $('editorText').value = result.content;
@@ -176,7 +184,7 @@ async function closeEditor(confirmDirty = false) {
   state.editorDirty = false;
   $('editorPanel').classList.add('hidden');
   $('editorDirty').classList.add('hidden');
-  await api.browser.setVisible(true);
+  if (!state.proposalPath) await api.browser.setVisible(true);
   syncActiveTabUi();
   return true;
 }
@@ -193,8 +201,112 @@ async function saveEditor() {
   } catch (error) { status(`Save: ${error.message}`); }
 }
 
+function extractReplacement(text) {
+  const source = String(text || '').trim();
+  const blocks = [];
+  const regex = /```[^\n]*\n([\s\S]*?)```/g;
+  let match;
+  while ((match = regex.exec(source))) blocks.push(match[1].replace(/\n$/, ''));
+  if (!blocks.length) return { content: source, fenced: false };
+  blocks.sort((a, b) => b.length - a.length);
+  return { content: blocks[0], fenced: true };
+}
+
+async function sendSelectedToAi() {
+  const target = state.editorPath || state.selectedPath;
+  if (!target) { status('AI bridge: select a local file first'); return; }
+  try {
+    if (state.editorPath === target && state.editorDirty) await saveEditor();
+    if (state.editorPath && !(await closeEditor(false))) return;
+    if (state.proposalPath) await cancelProposal();
+    const instruction = window.prompt('Instruction for the active AI about this local file', 'Read this file and explain it. If changes are needed, return the complete replacement file in one fenced code block.');
+    if (instruction === null) return;
+    $('signalAiBridge').textContent = 'SENDING';
+    $('aiBridgeBadge').textContent = 'AI BRIDGE · SENDING';
+    const result = await api.ai.sendFile(target, instruction);
+    $('fileActions').classList.add('hidden');
+    $('signalAiBridge').textContent = result.submitted ? 'SENT' : 'COMPOSER';
+    $('aiBridgeBadge').textContent = `AI BRIDGE · ${result.provider.toUpperCase()}`;
+    status(result.submitted
+      ? `Sent ${target} to ${result.provider} · only this file was shared`
+      : `${result.provider}: local context inserted into composer; press Send manually`);
+  } catch (error) {
+    $('signalAiBridge').textContent = 'ERROR';
+    $('aiBridgeBadge').textContent = 'AI BRIDGE · ERROR';
+    status(`AI bridge: ${error.message}`);
+  }
+}
+
+async function importAiReply() {
+  const target = state.editorPath || state.selectedPath;
+  if (!target) { status('AI bridge: select the target local file first'); return; }
+  try {
+    if (state.editorPath === target && state.editorDirty) await saveEditor();
+    if (state.editorPath) await closeEditor(false);
+    $('signalAiBridge').textContent = 'IMPORT';
+    $('aiBridgeBadge').textContent = 'AI BRIDGE · IMPORTING';
+    const result = await api.ai.readReply();
+    const proposal = extractReplacement(result.text);
+    state.proposalPath = target;
+    state.proposalProvider = result.provider;
+    await api.browser.setVisible(false);
+    $('newTabPage').classList.add('hidden');
+    $('editorPanel').classList.add('hidden');
+    $('proposalPanel').classList.remove('hidden');
+    $('proposalPath').textContent = target;
+    $('proposalProvider').textContent = `${result.provider} · latest assistant reply`;
+    $('proposalText').value = proposal.content;
+    $('proposalMeta').textContent = proposal.fenced
+      ? 'Complete fenced replacement detected. Review every line before Apply.'
+      : 'No fenced replacement was detected. The full assistant reply is shown; review carefully before Apply.';
+    $('signalAiBridge').textContent = 'REVIEW';
+    $('aiBridgeBadge').textContent = `AI BRIDGE · REVIEW ${result.provider.toUpperCase()}`;
+    $('fileActions').classList.add('hidden');
+    status(`AI proposal imported from ${result.provider} · no local file changed yet`);
+  } catch (error) {
+    $('signalAiBridge').textContent = 'ERROR';
+    $('aiBridgeBadge').textContent = 'AI BRIDGE · ERROR';
+    status(`Import AI reply: ${error.message}`);
+  }
+}
+
+async function cancelProposal() {
+  state.proposalPath = null;
+  state.proposalProvider = null;
+  $('proposalPanel').classList.add('hidden');
+  $('proposalText').value = '';
+  $('signalAiBridge').textContent = 'READY';
+  $('aiBridgeBadge').textContent = 'AI BRIDGE READY';
+  await api.browser.setVisible(true);
+  syncActiveTabUi();
+}
+
+async function applyProposal() {
+  if (!state.proposalPath) return;
+  const target = state.proposalPath;
+  const content = $('proposalText').value;
+  if (!window.confirm(`Replace ${target} with the reviewed AI proposal?`)) return;
+  try {
+    const result = await api.files.write(target, content);
+    state.proposalPath = null;
+    state.proposalProvider = null;
+    $('proposalPanel').classList.add('hidden');
+    $('signalAiBridge').textContent = 'APPLIED';
+    $('aiBridgeBadge').textContent = 'AI BRIDGE · APPLIED';
+    state.selectedPath = target;
+    await loadDirectory(state.currentDir, true);
+    await openEditor(result.path);
+    status(`Applied reviewed AI replacement · ${result.path}`);
+  } catch (error) {
+    $('signalAiBridge').textContent = 'ERROR';
+    status(`Apply AI proposal: ${error.message}`);
+  }
+}
+
 async function fileAction(action) {
   try {
+    if (action === 'ai-send') { await sendSelectedToAi(); return; }
+    if (action === 'ai-import') { await importAiReply(); return; }
     if (action === 'new-file' || action === 'new-folder') {
       const name = window.prompt(action === 'new-file' ? 'New file name' : 'New folder name');
       if (!name) return;
@@ -238,14 +350,15 @@ function updateBounds() {
 async function loadPreview() {
   try {
     const url = $('previewUrlInput').value.trim();
-    await api.preview.load(url);
     state.previewLoaded = true;
-    $('previewPlaceholder').classList.add('hidden');
-    $('signalPreview').textContent = 'LIVE';
+    $('signalPreview').textContent = 'LOADING';
+    status(`Preview loading · ${url}`);
+    await api.preview.load(url);
     updateBounds();
-    status(`Preview · ${url}`);
   } catch (error) {
+    state.previewLoaded = false;
     $('signalPreview').textContent = 'ERROR';
+    $('previewPlaceholder').classList.remove('hidden');
     status(`Preview: ${error.message}`);
   }
 }
@@ -273,6 +386,7 @@ function bindUi() {
   });
   $('addProfileButton').onclick = async () => {
     if (!(await closeEditor(true))) return;
+    if (state.proposalPath) await cancelProposal();
     const name = window.prompt('New browser profile name');
     if (!name) return;
     const result = await api.profiles.add(name);
@@ -285,21 +399,23 @@ function bindUi() {
   };
   $('clearProfileButton').onclick = async () => {
     if (!(await closeEditor(true))) return;
+    if (state.proposalPath) await cancelProposal();
     const profile = activeProfile(); if (!profile || !window.confirm(`Clear all site data for ${profile.name}? Other profiles are unaffected.`)) return;
     await api.profiles.clear(profile.id); status(`Cleared ${profile.name} site data`);
   };
   $('deleteProfileButton').onclick = async () => {
     if (!(await closeEditor(true))) return;
+    if (state.proposalPath) await cancelProposal();
     const profile = activeProfile(); if (!profile || !window.confirm(`Delete browser profile ${profile.name}?`)) return;
     const result = await api.profiles.delete(profile.id); state.profiles = result.profiles; state.activeProfileId = result.activeProfileId; renderProfiles();
   };
 
-  $('newTabButton').onclick = async () => { if (await closeEditor(true)) api.browser.newTab('rwacode://newtab'); };
-  $('backButton').onclick = async () => { if (await closeEditor(true)) api.browser.back(); };
-  $('forwardButton').onclick = async () => { if (await closeEditor(true)) api.browser.forward(); };
-  $('reloadButton').onclick = async () => { if (await closeEditor(true)) api.browser.reload(); };
-  $('homeButton').onclick = async () => { if (await closeEditor(true)) api.browser.navigate('rwacode://newtab'); };
-  $('addressInput').onkeydown = async (event) => { if (event.key === 'Enter' && await closeEditor(true)) api.browser.navigate(event.currentTarget.value); };
+  $('newTabButton').onclick = async () => { if (await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.newTab('rwacode://newtab'); } };
+  $('backButton').onclick = async () => { if (await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.back(); } };
+  $('forwardButton').onclick = async () => { if (await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.forward(); } };
+  $('reloadButton').onclick = async () => { if (await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.reload(); } };
+  $('homeButton').onclick = async () => { if (await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.navigate('rwacode://newtab'); } };
+  $('addressInput').onkeydown = async (event) => { if (event.key === 'Enter' && await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); api.browser.navigate(event.currentTarget.value); } };
   $('openExternalButton').onclick = () => api.browser.openExternal?.(activeTab()?.url || $('addressInput').value);
   $('crashReloadButton').onclick = () => { $('browserCrash').classList.add('hidden'); api.browser.reload(); };
   document.querySelectorAll('.provider-card').forEach((button) => button.onclick = () => api.browser.navigate(button.dataset.url));
@@ -316,6 +432,10 @@ function bindUi() {
   $('editorSaveButton').onclick = saveEditor;
   $('editorCloseButton').onclick = () => closeEditor(true);
   $('editorRevealButton').onclick = () => state.editorPath && api.files.reveal(state.editorPath);
+
+  $('proposalCancelButton').onclick = cancelProposal;
+  $('proposalApplyButton').onclick = applyProposal;
+  $('proposalRevealButton').onclick = () => state.proposalPath && api.files.reveal(state.proposalPath);
 
   $('previewGoButton').onclick = loadPreview;
   $('previewUrlInput').onkeydown = (event) => { if (event.key === 'Enter') loadPreview(); };
@@ -334,9 +454,9 @@ function bindUi() {
   document.addEventListener('keydown', async (event) => {
     const mod = event.metaKey || event.ctrlKey;
     if (mod && event.key.toLowerCase() === 's' && state.editorPath) { event.preventDefault(); await saveEditor(); }
-    if (mod && event.key.toLowerCase() === 'l' && await closeEditor(true)) { event.preventDefault(); $('addressInput').focus(); $('addressInput').select(); }
-    if (mod && event.key.toLowerCase() === 't' && await closeEditor(true)) { event.preventDefault(); api.browser.newTab('rwacode://newtab'); }
-    if (mod && event.key.toLowerCase() === 'w') { event.preventDefault(); if (state.editorPath) await closeEditor(true); else if (state.activeTabId) api.browser.closeTab(state.activeTabId); }
+    if (mod && event.key.toLowerCase() === 'l' && await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); event.preventDefault(); $('addressInput').focus(); $('addressInput').select(); }
+    if (mod && event.key.toLowerCase() === 't' && await closeEditor(true)) { if (state.proposalPath) await cancelProposal(); event.preventDefault(); api.browser.newTab('rwacode://newtab'); }
+    if (mod && event.key.toLowerCase() === 'w') { event.preventDefault(); if (state.proposalPath) await cancelProposal(); else if (state.editorPath) await closeEditor(true); else if (state.activeTabId) api.browser.closeTab(state.activeTabId); }
     if (mod && event.key.toLowerCase() === 'k') { event.preventDefault(); setFilesCollapsed(false); $('fileSearch').classList.remove('hidden'); $('fileSearchInput').focus(); }
   });
 }
@@ -346,7 +466,21 @@ api.browser.onTabs((payload) => {
   renderTabs(); renderProfiles();
 });
 api.browser.onCrash(() => $('browserCrash').classList.remove('hidden'));
-api.preview.onState((preview) => { $('signalPreview').textContent = preview.loading ? 'LOADING' : 'LIVE'; });
+api.preview.onState((preview) => {
+  const next = preview.state || (preview.loading ? 'LOADING' : 'IDLE');
+  $('signalPreview').textContent = next;
+  if (next === 'LIVE') {
+    state.previewLoaded = true;
+    $('previewPlaceholder').classList.add('hidden');
+    status(`Preview live · ${preview.url || $('previewUrlInput').value}`);
+  } else if (next === 'IDLE') {
+    state.previewLoaded = false;
+    $('previewPlaceholder').classList.remove('hidden');
+  } else if (next === 'ERROR') {
+    $('previewPlaceholder').classList.remove('hidden');
+    status(`Preview error · ${preview.description || preview.url || 'load failed'}`);
+  }
+});
 api.files.onChanged((change) => {
   $('fileSyncState').textContent = 'SYNC';
   $('signalFileSync').textContent = 'SYNC';

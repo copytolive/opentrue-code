@@ -22,6 +22,9 @@
     .rw-browser-menu button:hover{background:rgba(255,255,255,.055)}
     .rw-browser-menu .sep{height:1px;margin:5px 3px;background:rgba(255,255,255,.08)}
     .rw-browser-menu small{margin-left:auto;color:#6f7b8e}
+    .rw-editor-ai{height:30px;padding:0 10px;border:1px solid rgba(103,232,255,.24);border-radius:8px;background:rgba(103,232,255,.08);color:#dffbff;font-weight:700}
+    .rw-editor-ai.secondary{border-color:rgba(157,124,255,.22);background:rgba(157,124,255,.07);color:#e8e0ff}
+    .rw-editor-ai:hover{border-color:rgba(103,232,255,.48)}
   `;
   document.head.appendChild(style);
 
@@ -37,6 +40,11 @@
     <button data-action="clear">⌫ Clear Profile Site Data</button>
   `;
   document.body.appendChild(menu);
+
+  function status(message) {
+    const node = document.getElementById('statusMessage');
+    if (node) node.textContent = message;
+  }
 
   function place() {
     const rect = button.getBoundingClientRect();
@@ -66,8 +74,7 @@
         }
       }
     } catch (error) {
-      const status = document.getElementById('statusMessage');
-      if (status) status.textContent = `Browser menu: ${error.message}`;
+      status(`Browser menu: ${error.message}`);
     }
   };
 
@@ -76,13 +83,30 @@
   });
   window.addEventListener('resize', () => menu.classList.remove('open'));
 
-  // Main creates the first HOME tab immediately after loading the shell. Re-emit
-  // that state after all renderer listeners are installed so the first paint is
-  // deterministic instead of depending on an IPC timing race.
+  // Keep a single canonical AI flow in renderer.js. These editor buttons only
+  // proxy to the same root-locked actions that are also available in Files > ….
+  const editorHead = document.querySelector('.editor-head');
+  const reveal = document.getElementById('editorRevealButton');
+  if (editorHead && reveal) {
+    const send = document.createElement('button');
+    send.id = 'editorSendAiButton';
+    send.className = 'rw-editor-ai';
+    send.textContent = 'Send to AI';
+    send.title = 'Insert the selected local file into the active ChatGPT, Claude, or Gemini composer. RWACode does not press Send automatically.';
+    send.onclick = () => document.querySelector('#fileActions [data-action="ai-send"]')?.click();
+
+    const importReply = document.createElement('button');
+    importReply.id = 'editorImportAiButton';
+    importReply.className = 'rw-editor-ai secondary';
+    importReply.textContent = 'Import Reply';
+    importReply.title = 'Import the latest assistant replacement into the review panel. The local file is not changed until Apply is confirmed.';
+    importReply.onclick = () => document.querySelector('#fileActions [data-action="ai-import"]')?.click();
+
+    editorHead.insertBefore(send, reveal);
+    editorHead.insertBefore(importReply, reveal);
+  }
+
   queueMicrotask(() => {
-    api.browser.home().catch((error) => {
-      const status = document.getElementById('statusMessage');
-      if (status) status.textContent = `Startup sync: ${error.message}`;
-    });
+    api.browser.home().catch((error) => status(`Startup sync: ${error.message}`));
   });
 })();
