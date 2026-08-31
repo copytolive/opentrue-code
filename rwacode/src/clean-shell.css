@@ -1,0 +1,89 @@
+:root{
+  --files-w:260px;
+  --right-w:360px;
+  --chrome-h:40px;
+  --tab-h:30px;
+}
+
+/* Clean browser-first shell: one thin app header, one real browser, Files left, Preview right. */
+.app-shell{grid-template-rows:40px auto minmax(0,1fr) 22px}
+.topbar{height:40px;gap:9px;padding:0 10px;background:#090c11;border-bottom:1px solid var(--line)}
+.traffic{gap:6px}.traffic span{width:10px;height:10px}
+.brand{gap:7px;font-size:13px}.brand-mark{width:25px;height:25px;border-radius:7px;font-size:9px;box-shadow:none}
+.workspace-chip{height:26px;display:flex;align-items:center;padding:0 9px;border-radius:7px;max-width:220px;background:#0d1117}
+.security-chip{font-size:0;height:25px;display:flex;align-items:center;padding:0 9px;background:#0c1715;border-color:rgba(123,242,194,.16)}
+.security-chip i{margin-right:0}.security-chip::after{content:'Root locked';font-size:9px;margin-left:6px;color:#b9f8dc}
+.profile-wrap{display:none!important}
+
+/* Real tabs only. If there is only one tab, do not waste a whole row. */
+.tab-strip{min-height:0;height:30px;align-items:end;padding:2px var(--right-w) 0 var(--files-w);background:#090c11;transition:padding .18s ease,height .18s ease}
+.tab-strip:has(.tab:only-child){height:0;padding-top:0;border-bottom:0;overflow:hidden}
+.tab-strip:has(.tab:only-child) .tab-plus{display:none}
+.tab{height:28px;min-width:120px;max-width:190px;border-radius:8px 8px 0 0;padding:0 9px}
+.tab-plus{height:26px;margin-bottom:1px}
+
+.workspace-grid{grid-template-columns:var(--files-w) minmax(520px,1fr) var(--right-w)}
+
+/* VS Code-like Explorer: compact, operational, no marketing/status clutter. */
+.files-panel{grid-template-rows:38px auto auto auto auto minmax(0,1fr);background:#090c11}
+.files-head{height:38px;padding:0 9px}
+.files-head .kicker{display:none}.files-head b{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}.files-head .sync-badge{display:none}
+.root-lock{margin:6px 7px 2px;padding:6px 8px;border-radius:7px;background:#0b1116;border-color:rgba(103,232,255,.09);font-size:8px}
+.root-lock strong{display:none}.root-lock span{color:#758194}
+.file-breadcrumb{margin:0 7px;padding:5px 7px;font-size:8px}
+.file-tree{padding:5px 6px 12px}
+.file-row{height:27px;border-radius:4px;padding:0 6px;gap:6px}
+.file-row.selected{background:rgba(103,232,255,.08);border-color:transparent}
+.file-path-hint{opacity:.6}.file-row-more{height:22px;width:22px}
+
+/* Existing action menu becomes a proper contextual Explorer menu. */
+.file-actions{position:fixed;left:12px;top:90px;width:230px;grid-template-columns:1fr;gap:1px;padding:5px;border-radius:7px;background:#171a1f;border-color:rgba(255,255,255,.16);box-shadow:0 18px 55px rgba(0,0,0,.55)}
+.file-actions button{height:30px;border:0;border-radius:4px;background:transparent;text-align:left;padding:0 10px;color:#d3d7de}
+.file-actions button:hover{background:rgba(255,255,255,.07)}
+.file-actions .ai-action{color:#dffbff}.file-actions .secondary{color:#e8e0ff}
+
+/* Browser remains a normal browser. Remove internal/debug badges, keep familiar navigation. */
+.browser-panel{grid-template-rows:40px minmax(0,1fr)}
+.browser-toolbar{height:40px;padding:4px 8px;gap:4px;background:#090d12}
+.nav-button{width:28px;height:28px}
+.address-input{height:31px;border-radius:8px;padding:0 30px 0 31px;background:#080b10}
+.address-lock{top:7px;left:10px}
+.partition-badge,.bridge-badge{display:none!important}
+
+/* New tab is a utility launcher, not a marketing page. */
+.new-tab-page{padding:22px;justify-content:center;background:#090c11}
+.hero-mark,.new-tab-page h1,.new-tab-page>p{display:none}
+.provider-grid{width:min(620px,92%);grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.provider-card{height:68px;border-radius:10px;padding:10px;grid-template-columns:26px 1fr}
+.provider-card span{width:22px;height:22px;border-radius:6px}.provider-card small{display:none}
+
+/* Preview is the only permanent right-side surface. Workspace Signals are removed from view. */
+.right-panel{position:relative;grid-template-rows:minmax(0,1fr);background:#090c11}
+.signals-panel{display:none!important}
+.preview-panel{height:100%;grid-template-rows:38px 35px minmax(0,1fr);border-bottom:0}
+.preview-head{height:38px;padding:0 8px}.preview-head .kicker{display:none}.preview-head b{font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.preview-toolbar{height:35px;padding:4px 7px}.preview-toolbar input{border-radius:7px;font-size:10px}.preview-toolbar button{border-radius:7px;font-size:10px}
+.preview-surface{margin:6px;border-radius:8px;background:#080b10}
+.preview-placeholder{padding:0;display:grid;place-items:center;background:#080b10}
+.preview-placeholder>*{display:none}.preview-placeholder::after{content:'Preview';color:#556172;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.preview-surface.tablet{margin-left:12%;margin-right:12%}.preview-surface.mobile{margin-left:27%;margin-right:27%}
+
+/* Drag handles for Files and Preview widths. */
+.shell-resize-handle{position:absolute;z-index:120;top:0;bottom:0;width:6px;cursor:col-resize;background:transparent}
+.shell-resize-handle::after{content:'';position:absolute;top:0;bottom:0;left:2px;width:1px;background:transparent}
+.shell-resize-handle:hover::after,.shell-resize-handle.dragging::after{background:rgba(103,232,255,.42)}
+.files-panel>.shell-resize-handle{right:-3px}.right-panel>.shell-resize-handle{left:-3px}
+body.shell-resizing{user-select:none;cursor:col-resize}
+
+/* Keep only one quiet status line. */
+.statusbar{height:22px;padding:0 8px;font-size:8px;background:#080b10}
+.statusbar>span:not(#statusMessage):not(.grow){display:none}
+#statusMessage{color:#748094;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Collapsed panels remain functional but visually minimal. */
+body.files-collapsed{--files-w:38px}body.right-collapsed{--right-w:38px}
+body.files-collapsed .files-panel{grid-template-rows:38px 1fr}body.files-collapsed .files-head{height:38px}
+body.right-collapsed .right-panel{grid-template-rows:1fr}
+body.right-collapsed .preview-panel{grid-template-rows:38px 1fr}
+
+@media (max-width:1100px){:root{--files-w:220px;--right-w:300px}.workspace-grid{grid-template-columns:var(--files-w) minmax(420px,1fr) var(--right-w)}}
