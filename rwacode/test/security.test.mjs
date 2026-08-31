@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { createPathGuard } = require('../lib/path-guard.cjs');
+
+test('path guard allows files inside root and rejects escape attempts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-root-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-outside-'));
+  fs.writeFileSync(path.join(root, 'inside.txt'), 'ok');
+  fs.writeFileSync(path.join(outside, 'outside.txt'), 'no');
+  fs.symlinkSync(outside, path.join(root, 'escape-link'));
+  const guard = createPathGuard(root);
+
+  assert.equal(guard.resolveExisting('inside.txt'), path.join(root, 'inside.txt'));
+  assert.throws(() => guard.resolveExisting('../outside.txt'));
+  assert.throws(() => guard.resolveExisting('escape-link/outside.txt'));
+  assert.throws(() => guard.resolveExisting('/etc/passwd'));
+  assert.throws(() => guard.resolveWritable('../new.txt'));
+});
+
+test('external browser webContents stay sandboxed and Node-free', () => {
+  const source = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+  assert.match(source, /sandbox:\s*true/);
+  assert.match(source, /contextIsolation:\s*true/);
+  assert.match(source, /nodeIntegration:\s*false/);
+  assert.doesNotMatch(source, /http\.createServer|express\(|fastify\(|listen\(/);
+});
+
+test('preload exposes only explicit allowlisted IPC methods', () => {
+  const source = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
+  assert.match(source, /contextBridge\.exposeInMainWorld\('rwacode'/);
+  assert.doesNotMatch(source, /child_process|exec\(|spawn\(|require\(['"]fs['"]\)/);
+});
