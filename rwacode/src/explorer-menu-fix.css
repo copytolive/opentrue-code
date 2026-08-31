@@ -1,4 +1,4 @@
-/* Final Explorer context-menu geometry. Loaded last so the menu cannot fall back to the old two-column layout. */
+/* Final Explorer context-menu geometry and invocation contract. Loaded last. */
 .file-actions{
   width:min(300px,calc(100% - 16px))!important;
   max-width:calc(100% - 16px)!important;
@@ -34,4 +34,10 @@
 .file-action-separator{
   width:auto!important;
   max-width:none!important;
+}
+
+/* Context actions are intentionally right-click only, VS Code style. */
+#fileMoreButton,
+.file-row-more{
+  display:none!important;
 }

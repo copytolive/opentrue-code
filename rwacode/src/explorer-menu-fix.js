@@ -4,13 +4,11 @@
   const menu = document.getElementById('fileActions');
   const panel = document.getElementById('filesPanel');
   const tree = document.getElementById('fileTree');
-  const panelMore = document.getElementById('fileMoreButton');
-  if (!menu || !panel) return;
+  if (!menu || !panel || !tree) return;
 
   const isOpen = () => !menu.classList.contains('hidden');
 
   function closeMenu() {
-    if (!isOpen()) return;
     menu.classList.add('hidden');
     menu.setAttribute('aria-hidden', 'true');
   }
@@ -24,22 +22,41 @@
       if (!isOpen()) return;
       const panelRect = panel.getBoundingClientRect();
       const margin = 8;
-      menu.style.width = `${Math.max(220, Math.min(300, panelRect.width - margin * 2))}px`;
-      menu.style.maxWidth = `${Math.max(220, panelRect.width - margin * 2)}px`;
+      const menuWidth = Math.max(220, Math.min(300, panelRect.width - margin * 2));
+      menu.style.width = `${menuWidth}px`;
+      menu.style.maxWidth = `${menuWidth}px`;
       const rect = menu.getBoundingClientRect();
-      const x = Number.isFinite(clientX) ? clientX - panelRect.left : margin;
-      const y = Number.isFinite(clientY) ? clientY - panelRect.top : 48;
+      const x = clientX - panelRect.left;
+      const y = clientY - panelRect.top;
       menu.style.left = `${clamp(x, margin, panelRect.width - rect.width - margin)}px`;
-      menu.style.top = `${clamp(y, 48, panelRect.height - rect.height - margin)}px`;
+      menu.style.top = `${clamp(y, 40, panelRect.height - rect.height - margin)}px`;
       menu.setAttribute('aria-hidden', 'false');
     });
   }
 
+  // The Explorer menu is a true row context menu: it opens only when the user
+  // right-clicks directly on a file/folder row. Blank Explorer space and header
+  // controls do not open it.
+  tree.addEventListener('contextmenu', (event) => {
+    const row = event.target.closest('.file-row[data-path]');
+    if (!row) {
+      closeMenu();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    positionMenu(event.clientX, event.clientY);
+  });
+
   document.addEventListener('pointerdown', (event) => {
     if (!isOpen()) return;
-    const target = event.target;
-    if (menu.contains(target)) return;
-    if (target.closest?.('.file-row-more') || target.closest?.('#fileMoreButton')) return;
+    if (menu.contains(event.target)) return;
+    closeMenu();
+  }, true);
+
+  document.addEventListener('contextmenu', (event) => {
+    if (!isOpen()) return;
+    if (event.target.closest?.('.file-row[data-path]')) return;
     closeMenu();
   }, true);
 
@@ -49,30 +66,13 @@
 
   window.addEventListener('blur', closeMenu);
   window.addEventListener('resize', closeMenu);
-
-  tree?.addEventListener('contextmenu', (event) => {
-    const row = event.target.closest('.file-row[data-path]');
-    if (!row) return;
-    positionMenu(event.clientX, event.clientY);
-  });
-
-  tree?.addEventListener('click', (event) => {
-    const trigger = event.target.closest('.file-row-more');
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    positionMenu(rect.right, rect.bottom);
-  });
-
-  panelMore?.addEventListener('click', () => {
-    const rect = panelMore.getBoundingClientRect();
-    positionMenu(rect.right, rect.bottom);
-  });
+  panel.addEventListener('scroll', closeMenu, true);
 
   menu.addEventListener('click', (event) => {
     if (event.target.closest('button') && !event.target.closest('button:disabled')) {
-      requestAnimationFrame(() => {
-        if (isOpen()) closeMenu();
-      });
+      requestAnimationFrame(closeMenu);
     }
   });
+
+  closeMenu();
 })();
