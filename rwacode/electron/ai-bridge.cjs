@@ -2,6 +2,9 @@
 
 const MAX_AI_CONTEXT_BYTES = 256 * 1024;
 const MAX_AI_REPLY_BYTES = 1024 * 1024;
+const MAX_ACTIVE_CONTEXT_FILES = 8;
+const ACTIVE_CONTEXT_START = '[RWACode ACTIVE LOCAL CONTEXT]';
+const ACTIVE_CONTEXT_END = '[END RWACode ACTIVE LOCAL CONTEXT]';
 
 function providerFromUrl(url) {
   try {
@@ -29,6 +32,30 @@ function buildPrompt(relativePath, content, instruction) {
     content,
     `--- END ${relativePath} ---`,
   ].join('\n');
+}
+
+function buildMultiFilePrompt(files, instruction) {
+  const task = String(instruction || '').trim() || 'Use these selected local files as the source for my next request.';
+  const sections = [];
+  for (const file of files) {
+    sections.push(`--- BEGIN ${file.path} ---`, file.content, `--- END ${file.path} ---`, '');
+  }
+  return [
+    '[RWACode LOCAL FOLDER CONTEXT]',
+    `Selected local files: ${files.length}`,
+    '',
+    `User instruction: ${task}`,
+    '',
+    'Security boundary: you are receiving only this bounded, explicitly selected local context. You do not have direct filesystem access.',
+    'Use the supplied file contents rather than guessing from a macOS path.',
+    'Do not claim that you read any other local file unless it is included below.',
+    '',
+    ...sections,
+  ].join('\n').trimEnd();
+}
+
+function wrapActiveContext(body) {
+  return `${ACTIVE_CONTEXT_START}\n${body}\n${ACTIVE_CONTEXT_END}`;
 }
 
 function extractSingleReplacement(text) {
@@ -95,8 +122,6 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
   if (typeof getActiveWebContents !== 'function') throw new Error('getActiveWebContents is required');
   if (typeof readTextFile !== 'function') throw new Error('readTextFile is required');
 
-  // Fixed, allowlisted cosmetic pass. This does not expose a generic execute primitive to the renderer.
-  // Re-running is cheap: each provider page installs its own MutationObserver only once per navigation.
   const cosmeticTimer = setInterval(() => {
     const wc = getActiveWebContents();
     if (!wc || wc.isDestroyed()) return;
@@ -112,14 +137,36 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     if (!provider) throw new Error('active tab must be ChatGPT, Claude, or Gemini');
     await installProviderCosmetics(wc, provider);
 
-    const file = await readTextFile(relativePath);
-    const bytes = Buffer.byteLength(file.content, 'utf8');
-    if (bytes > MAX_AI_CONTEXT_BYTES) throw new Error('selected file is too large for the local AI bridge (256 KiB max)');
-    const prompt = buildPrompt(file.path, file.content, instruction);
+    let files = [];
+    if (Array.isArray(relativePath)) {
+      const paths = [...new Set(relativePath.map(String).map((value) => value.trim()).filter(Boolean))].slice(0, MAX_ACTIVE_CONTEXT_FILES);
+      if (!paths.length) throw new Error('active local context is empty');
+      let totalBytes = 0;
+      for (const pathValue of paths) {
+        const file = await readTextFile(pathValue);
+        const bytes = Buffer.byteLength(file.content, 'utf8');
+        totalBytes += bytes;
+        if (totalBytes > MAX_AI_CONTEXT_BYTES) throw new Error('selected local context is too large for the AI bridge (256 KiB max)');
+        files.push(file);
+      }
+    } else {
+      const file = await readTextFile(relativePath);
+      const bytes = Buffer.byteLength(file.content, 'utf8');
+      if (bytes > MAX_AI_CONTEXT_BYTES) throw new Error('selected file is too large for the local AI bridge (256 KiB max)');
+      files = [file];
+    }
+
+    const body = files.length === 1
+      ? buildPrompt(files[0].path, files[0].content, instruction)
+      : buildMultiFilePrompt(files, instruction);
+    const prompt = wrapActiveContext(body);
+    const totalSize = files.reduce((sum, file) => sum + Number(file.size || Buffer.byteLength(file.content, 'utf8')), 0);
 
     const script = `(async () => {
       const prompt = ${JSON.stringify(prompt)};
       const provider = ${JSON.stringify(provider)};
+      const activeStart = ${JSON.stringify(ACTIVE_CONTEXT_START)};
+      const activeEnd = ${JSON.stringify(ACTIVE_CONTEXT_END)};
       const selectors = provider === 'ChatGPT'
         ? ['#prompt-textarea','[data-testid="prompt-textarea"]','textarea[data-testid*="prompt"]','textarea']
         : provider === 'Claude'
@@ -135,9 +182,21 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
       }
       if (!input) return { ok:false, provider, error:'composer not found after waiting for provider UI' };
 
+      const stripPreviousContext = (value) => {
+        const source = String(value || '');
+        const start = source.indexOf(activeStart);
+        if (start < 0) return source;
+        const end = source.indexOf(activeEnd, start + activeStart.length);
+        if (end < 0) return source;
+        const before = source.slice(0, start);
+        const after = source.slice(end + activeEnd.length);
+        return (before + after).replace(/^\s+|\s+$/g, '');
+      };
+
       input.focus();
       const existing = 'value' in input ? input.value : (input.innerText || input.textContent || '');
-      const combined = existing.trim() ? existing + '\\n\\n' + prompt : prompt;
+      const userText = stripPreviousContext(existing);
+      const combined = userText.trim() ? prompt + '\n\n' + userText : prompt;
 
       if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
         const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -170,7 +229,15 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
 
     const result = await wc.executeJavaScript(script, true);
     if (!result?.ok) throw new Error(result?.error || 'could not insert local file context');
-    return { provider, path: file.path, size: file.size, inserted: true, submitted: false };
+    return {
+      provider,
+      path: files[0].path,
+      paths: files.map((file) => file.path),
+      size: totalSize,
+      fileCount: files.length,
+      inserted: true,
+      submitted: false,
+    };
   }
 
   async function readReply() {
@@ -198,7 +265,7 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
       let codeBlocks = [];
       for (const selector of ['pre code','code-block','pre','.code-block']) {
         const found = Array.from(node.querySelectorAll(selector))
-          .map((code) => (code.innerText || code.textContent || '').replace(/\\n$/, ''))
+          .map((code) => (code.innerText || code.textContent || '').replace(/\n$/, ''))
           .filter((value) => value.trim().length > 0);
         if (found.length) { codeBlocks = [...new Set(found)]; break; }
       }
@@ -233,8 +300,13 @@ module.exports = {
   createAiBridge,
   providerFromUrl,
   buildPrompt,
+  buildMultiFilePrompt,
+  wrapActiveContext,
   extractSingleReplacement,
   installProviderCosmetics,
   MAX_AI_CONTEXT_BYTES,
   MAX_AI_REPLY_BYTES,
+  MAX_ACTIVE_CONTEXT_FILES,
+  ACTIVE_CONTEXT_START,
+  ACTIVE_CONTEXT_END,
 };
