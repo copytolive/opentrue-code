@@ -11,17 +11,17 @@
 <body>
   <div id="app" class="app-shell">
     <header class="topbar">
-      <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
-      <div class="brand"><div class="brand-mark">R//</div><strong>RWACode</strong></div>
-      <div class="workspace-chip" id="workspaceChip">⌁ chat-local-online</div>
+      <div class="traffic" aria-hidden="true"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+      <div class="brand"><div class="brand-mark"><span>R//</span></div><strong>RWACode</strong></div>
+      <div class="workspace-chip" id="workspaceChip">~/chat-local-online</div>
       <div class="top-spacer"></div>
-      <div class="security-chip"><i></i>Root locked · Native bridge</div>
-      <div class="profile-wrap">
+      <div class="security-chip" title="Workspace is locked to the canonical local root"><span class="security-lock">▣</span><span>Root locked</span><span class="security-caret">⌄</span></div>
+
+      <!-- Runtime compatibility nodes: browser profiles stay persistent but are intentionally hidden from normal UI. -->
+      <div class="profile-wrap runtime-only">
         <button id="profileButton" class="profile-button" aria-haspopup="menu"><span id="profileAvatar" class="avatar">P</span><span id="profileName">Personal</span><span>⌄</span></button>
         <div id="profileMenu" class="profile-menu" role="menu">
-          <div class="menu-label">Browser profiles</div>
-          <div id="profileList"></div>
-          <div class="menu-separator"></div>
+          <div class="menu-label">Browser profiles</div><div id="profileList"></div><div class="menu-separator"></div>
           <button id="addProfileButton" class="menu-action">＋ Add profile</button>
           <button id="renameProfileButton" class="menu-action">✎ Rename active profile</button>
           <button id="clearProfileButton" class="menu-action">⌫ Clear active site data</button>
@@ -30,49 +30,56 @@
       </div>
     </header>
 
-    <nav class="tab-strip">
-      <div id="tabs" class="tabs"></div>
-      <button id="newTabButton" class="tab-plus" title="New tab">＋</button>
-    </nav>
-
     <main class="workspace-grid">
       <aside id="filesPanel" class="files-panel">
         <div class="panel-header files-head">
-          <button id="filesCollapseButton" class="icon-button panel-toggle" title="Collapse Local Files">◂</button>
-          <span class="kicker panel-copy">LOCAL</span><b class="panel-copy">Files</b>
-          <span id="fileSyncState" class="sync-badge panel-copy">LIVE</span>
-          <span class="grow"></span>
+          <button id="filesCollapseButton" class="icon-button panel-toggle" title="Collapse Explorer">‹</button>
+          <b class="panel-copy">Explorer</b><span class="grow"></span>
           <button id="fileSearchButton" class="icon-button panel-copy" title="Search files">⌕</button>
-          <button id="fileRefreshButton" class="icon-button panel-copy" title="Refresh">↻</button>
-          <button id="fileMoreButton" class="icon-button panel-copy" title="File actions">⋯</button>
+          <button id="fileRefreshButton" class="icon-button panel-copy" title="Refresh Explorer">↻</button>
+          <button id="fileMoreButton" class="icon-button panel-copy" title="Explorer actions">•••</button>
+          <span id="fileSyncState" class="runtime-only">LIVE</span>
         </div>
-        <div class="root-lock panel-content" id="rootLock"><strong>ROOT LOCK</strong><span id="rootPath"></span></div>
+
+        <div class="root-lock panel-content" id="rootLock">
+          <div class="root-lock-title"><strong>ROOT LOCK</strong><span class="root-lock-icon">▣</span></div>
+          <div class="root-lock-copy">Root directory is locked</div>
+          <span id="rootPath"></span>
+        </div>
         <div id="fileBreadcrumb" class="file-breadcrumb panel-content">./</div>
         <div id="fileSearch" class="file-search panel-content hidden"><input id="fileSearchInput" placeholder="Filter current folder…" /></div>
         <div id="fileActions" class="file-actions panel-content hidden">
-          <button data-action="ai-send" class="ai-action">Send selected file to AI</button>
-          <button data-action="ai-import" class="ai-action secondary">Import latest AI reply</button>
-          <button data-action="new-file">New file</button><button data-action="new-folder">New folder</button><button data-action="reveal">Reveal selected</button><button data-action="rename">Rename</button><button data-action="delete" class="danger">Delete</button>
+          <button data-action="new-file">New File…</button>
+          <button data-action="new-folder">New Folder…</button>
+          <button data-action="reveal">Reveal in Finder</button>
+          <button data-action="ai-send" class="ai-action">Add selected file to Chat</button>
+          <button data-action="ai-import" class="ai-action secondary">Review latest AI change</button>
+          <button data-action="rename">Rename…</button>
+          <button data-action="delete" class="danger">Delete</button>
         </div>
         <div id="fileTree" class="file-tree panel-content"></div>
+        <div class="explorer-foot panel-content" aria-hidden="true"><span>＋</span><span class="grow"></span><span>▣</span><span>▯</span></div>
       </aside>
 
       <section class="browser-panel">
+        <nav class="tab-strip">
+          <div id="tabs" class="tabs"></div>
+          <button id="newTabButton" class="tab-plus" title="New tab">＋</button>
+        </nav>
+
         <div class="browser-toolbar">
           <button id="backButton" class="nav-button" title="Back">←</button>
           <button id="forwardButton" class="nav-button" title="Forward">→</button>
           <button id="reloadButton" class="nav-button" title="Reload">↻</button>
           <button id="homeButton" class="nav-button" title="New tab">⌂</button>
-          <div class="address-wrap"><span class="address-lock">◆</span><input id="addressInput" class="address-input" value="rwacode://newtab" spellcheck="false" /><span class="partition-badge">PROFILE ISOLATED</span></div>
+          <div class="address-wrap"><span class="address-lock">▣</span><input id="addressInput" class="address-input" value="rwacode://newtab" spellcheck="false" /><span class="partition-badge">PROFILE ISOLATED</span></div>
           <span id="aiBridgeBadge" class="bridge-badge">AI BRIDGE READY</span>
           <button id="openExternalButton" class="nav-button" title="Open current URL externally">↗</button>
-          <button id="browserMenuButton" class="nav-button" title="Browser menu">⋯</button>
+          <button id="browserMenuButton" class="nav-button" title="Browser menu">⋮</button>
         </div>
+
         <div id="browserSurface" class="browser-surface">
           <div id="newTabPage" class="new-tab-page">
-            <div class="hero-mark">R//</div>
-            <h1>Browse. Build. Preview.</h1>
-            <p>Normal browser sessions. Native local workspace. Zero API-key UI.</p>
             <div class="provider-grid">
               <button class="provider-card" data-url="https://claude.ai"><span>C</span><b>Claude</b><small>Persistent browser login</small></button>
               <button class="provider-card" data-url="https://chatgpt.com"><span>◎</span><b>ChatGPT</b><small>Browser login</small></button>
@@ -80,23 +87,22 @@
             </div>
           </div>
           <div id="browserCrash" class="surface-message hidden"><h2>Tab renderer stopped</h2><p>The tab can be reloaded without restarting RWACode.</p><button id="crashReloadButton">Reload tab</button></div>
+
           <section id="editorPanel" class="editor-panel hidden" aria-label="Local file editor">
             <header class="editor-head">
               <div><span class="kicker">LOCAL FILE</span><strong id="editorTitle">File</strong></div>
-              <span id="editorDirty" class="editor-dirty hidden">UNSAVED</span>
-              <span class="grow"></span>
+              <span id="editorDirty" class="editor-dirty hidden">UNSAVED</span><span class="grow"></span>
               <button id="editorRevealButton" class="editor-action">Reveal</button>
               <button id="editorCloseButton" class="editor-close" title="Close local editor">×</button>
             </header>
             <textarea id="editorText" spellcheck="false"></textarea>
             <footer class="editor-foot"><span id="editorMeta"></span><span class="grow"></span><button id="editorSaveButton" class="primary">Save</button></footer>
           </section>
+
           <section id="proposalPanel" class="proposal-panel hidden" aria-label="AI replacement review">
             <header class="proposal-head">
               <div class="proposal-title"><span class="kicker">AI PROPOSAL</span><strong id="proposalPath">File</strong><small id="proposalProvider">Provider</small></div>
-              <span class="grow"></span>
-              <button id="proposalCancelButton" class="cancel">Cancel</button>
-              <button id="proposalApplyButton" class="primary">Apply replacement</button>
+              <span class="grow"></span><button id="proposalCancelButton" class="cancel">Cancel</button><button id="proposalApplyButton" class="primary">Apply replacement</button>
             </header>
             <div id="proposalMeta" class="proposal-meta">Review the complete replacement before applying it.</div>
             <textarea id="proposalText" spellcheck="false"></textarea>
@@ -107,31 +113,60 @@
 
       <aside id="rightPanel" class="right-panel">
         <section class="preview-panel">
-          <div class="panel-header preview-head">
-            <button id="rightCollapseButton" class="icon-button panel-toggle" title="Collapse Preview">▸</button>
-            <span class="kicker panel-copy">PROJECT</span><b class="panel-copy">Preview</b><span class="grow"></span>
-            <button class="icon-button device-button active panel-copy" data-device="desktop" title="Desktop preview">▱</button><button class="icon-button device-button panel-copy" data-device="tablet" title="Tablet preview">▯</button><button class="icon-button device-button panel-copy" data-device="mobile" title="Mobile preview">▯</button><button id="previewReloadButton" class="icon-button panel-copy" title="Reload preview">↻</button><button id="previewExternalButton" class="icon-button panel-copy" title="Open preview externally">↗</button>
+          <div class="preview-head panel-header">
+            <button id="rightCollapseButton" class="icon-button panel-toggle" title="Collapse Preview">›</button>
+            <div class="preview-tabs">
+              <button id="previewTabButton" class="preview-tab active">Preview</button>
+              <button id="inspectorTabButton" class="preview-tab">Inspector</button>
+            </div>
+            <span class="grow"></span>
           </div>
-          <div class="preview-toolbar panel-content"><input id="previewUrlInput" value="http://127.0.0.1:3000" /><button id="previewGoButton">Load</button></div>
-          <div id="previewSurface" class="preview-surface panel-content"><div id="previewPlaceholder" class="preview-placeholder"><span>LIVE PREVIEW</span><h2>Build beyond<br />the browser.</h2><p>Load a local project URL to preview it here.</p></div></div>
+
+          <div id="previewContent" class="preview-content panel-content">
+            <div class="preview-toolbar"><input id="previewUrlInput" value="http://127.0.0.1:3000" placeholder="Enter URL to preview" /><button id="previewGoButton">Load</button></div>
+            <div class="preview-devicebar">
+              <div class="device-group">
+                <button class="device-button active" data-device="desktop" title="Desktop preview">▱</button>
+                <button class="device-button" data-device="tablet" title="Tablet preview">▯</button>
+                <button class="device-button" data-device="mobile" title="Mobile preview">▯</button>
+              </div>
+              <span class="grow"></span>
+              <button id="previewReloadButton" class="preview-icon" title="Reload preview">↻</button>
+              <button id="previewExternalButton" class="runtime-only" title="Open preview externally">↗</button>
+            </div>
+
+            <div id="previewSurface" class="preview-surface">
+              <div id="previewPlaceholder" class="preview-placeholder">
+                <div class="preview-placeholder-icon">✦</div>
+                <strong>Preview idle</strong>
+                <span>Enter a URL above and click Load<br />to start previewing</span>
+              </div>
+            </div>
+
+            <section class="sync-card" aria-label="Workspace sync status">
+              <h3>Sync Status</h3>
+              <div class="sync-row"><span class="sync-icon good">✓</span><div><b id="syncStatusFile">Sync ready</b><small>Workspace is up to date</small></div><span class="sync-chevron">›</span></div>
+              <div class="sync-row"><span class="sync-icon good">▣</span><div><b>Root locked</b><small>Files are protected</small></div><span class="sync-chevron">›</span></div>
+              <div class="sync-row"><span class="sync-icon idle">●</span><div><b id="syncStatusPreview">Preview idle</b><small id="syncStatusPreviewMeta">No active preview</small></div><span class="sync-chevron">›</span></div>
+            </section>
+          </div>
+
+          <div id="inspectorContent" class="inspector-content hidden panel-content">
+            <div class="inspector-card"><span>Workspace</span><b>chat-local-online</b></div>
+            <div class="inspector-card"><span>Filesystem</span><b>Root locked</b></div>
+            <div class="inspector-card"><span>Browser</span><b>Native provider page</b></div>
+            <div class="inspector-card"><span>Preview</span><b id="inspectorPreviewState">Idle</b></div>
+          </div>
         </section>
-        <section class="signals-panel panel-content">
-          <div class="panel-header"><span class="kicker">SYSTEM</span><b>Workspace Signals</b><span class="grow"></span></div>
-          <div class="signals">
-            <div><b>Browser profile</b><span id="signalProfile">PERSONAL</span></div>
-            <div><b>Session isolation</b><span>PERSISTENT</span></div>
-            <div><b>Native file bridge</b><span>ROOT LOCKED</span></div>
-            <div><b>File synchronization</b><span id="signalFileSync">LIVE</span></div>
-            <div><b>Selective AI bridge</b><span id="signalAiBridge">READY</span></div>
-            <div><b>Preview channel</b><span id="signalPreview">IDLE</span></div>
-            <div><b>HTTP control API</b><span class="muted">ABSENT</span></div>
-            <div><b>External web Node access</b><span class="muted">DENIED</span></div>
-          </div>
+
+        <!-- Hidden runtime signal nodes remain for existing renderer wiring and acceptance tests. -->
+        <section class="signals-panel runtime-only">
+          <span id="signalProfile">PERSONAL</span><span id="signalFileSync">LIVE</span><span id="signalAiBridge">READY</span><span id="signalPreview">IDLE</span>
         </section>
       </aside>
     </main>
 
-    <footer class="statusbar"><span class="secure-dot">● Secure local</span><span>RWACode Browser Engine</span><span id="statusMessage">Ready</span><span class="grow"></span><span>Profile: <b id="statusProfile">Personal</b></span><span>UTF-8</span><span class="kbd">⌘K</span></footer>
+    <footer class="statusbar runtime-only"><span class="secure-dot">● Secure local</span><span>RWACode Browser Engine</span><span id="statusMessage">Ready</span><span class="grow"></span><span>Profile: <b id="statusProfile">Personal</b></span><span>UTF-8</span><span class="kbd">⌘K</span></footer>
   </div>
 
   <script src="./renderer.js"></script>
