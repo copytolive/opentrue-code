@@ -37,12 +37,16 @@
 .file-actions{
   width:310px!important;
   max-height:min(650px,calc(100vh - 90px));
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:1px!important;
   overflow:auto;
   padding:6px!important;
 }
 .file-actions button{
   min-height:34px!important;
   height:auto!important;
+  width:100%;
   display:flex;
   align-items:center;
   gap:12px;
