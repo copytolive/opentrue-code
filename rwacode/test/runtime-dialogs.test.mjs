@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
+const executableSource = source.replace(/^\s*\/\/.*$/gm, '');
 
 test('Electron prompt replacement uses an in-app async dialog', () => {
   assert.match(source, /rw-dialog-backdrop/);
   assert.match(source, /function uiPrompt\(/);
   assert.match(source, /function uiConfirm\(/);
   assert.match(source, /await setBrowserVisible\(false\)/);
-  assert.doesNotMatch(source, /window\.prompt\(/);
-  assert.doesNotMatch(source, /window\.confirm\(/);
+  assert.doesNotMatch(executableSource, /window\.prompt\(/);
+  assert.doesNotMatch(executableSource, /window\.confirm\(/);
 });
 
 test('Send to AI asks before revealing the provider and inserts only selected file context', () => {
