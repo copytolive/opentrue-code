@@ -31,6 +31,15 @@ function buildPrompt(relativePath, content, instruction) {
   ].join('\n');
 }
 
+function extractSingleReplacement(text) {
+  const source = String(text || '');
+  const blocks = [...source.matchAll(/```[^\n]*\n([\s\S]*?)```/g)];
+  if (blocks.length !== 1) {
+    throw new Error(`AI import requires exactly one fenced replacement code block; found ${blocks.length}`);
+  }
+  return blocks[0][1].replace(/\n$/, '');
+}
+
 function createAiBridge({ getActiveWebContents, readTextFile }) {
   if (typeof getActiveWebContents !== 'function') throw new Error('getActiveWebContents is required');
   if (typeof readTextFile !== 'function') throw new Error('readTextFile is required');
@@ -123,10 +132,19 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     const text = String(result.text || '');
     if (!text) throw new Error('latest assistant reply is empty');
     if (Buffer.byteLength(text, 'utf8') > MAX_AI_REPLY_BYTES) throw new Error('assistant reply is too large to import');
-    return { provider, text };
+
+    const replacement = extractSingleReplacement(text);
+    return { provider, text: `\`\`\`\n${replacement}\n\`\`\`` };
   }
 
   return { sendFile, readReply };
 }
 
-module.exports = { createAiBridge, providerFromUrl, buildPrompt, MAX_AI_CONTEXT_BYTES, MAX_AI_REPLY_BYTES };
+module.exports = {
+  createAiBridge,
+  providerFromUrl,
+  buildPrompt,
+  extractSingleReplacement,
+  MAX_AI_CONTEXT_BYTES,
+  MAX_AI_REPLY_BYTES,
+};
