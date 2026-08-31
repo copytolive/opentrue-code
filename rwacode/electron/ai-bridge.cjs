@@ -55,7 +55,7 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
     if (bytes > MAX_AI_CONTEXT_BYTES) throw new Error('selected file is too large for the local AI bridge (256 KiB max)');
     const prompt = buildPrompt(file.path, file.content, instruction);
 
-    const script = `(() => {
+    const script = `(async () => {
       const prompt = ${JSON.stringify(prompt)};
       const provider = ${JSON.stringify(provider)};
       const selectors = provider === 'ChatGPT'
@@ -63,8 +63,15 @@ function createAiBridge({ getActiveWebContents, readTextFile }) {
         : provider === 'Claude'
           ? ['[data-testid="chat-input"]','div.ProseMirror[contenteditable="true"]','div[contenteditable="true"][data-testid*="input"]','div[contenteditable="true"]','textarea']
           : ['rich-textarea .ql-editor','.ql-editor[contenteditable="true"]','div[contenteditable="true"][role="textbox"]','div[contenteditable="true"]','textarea'];
-      const input = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
-      if (!input) return { ok:false, provider, error:'composer not found' };
+
+      const findInput = () => selectors.map((selector) => document.querySelector(selector)).find(Boolean);
+      const deadline = Date.now() + 12000;
+      let input = findInput();
+      while (!input && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        input = findInput();
+      }
+      if (!input) return { ok:false, provider, error:'composer not found after waiting for provider UI' };
 
       input.focus();
       const existing = 'value' in input ? input.value : (input.innerText || input.textContent || '');
