@@ -8,12 +8,13 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createPathGuard } = require('../lib/path-guard.cjs');
 
-test('path guard allows files inside root and rejects escape attempts', () => {
+test('path guard allows files inside root and rejects read/write escape attempts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-root-'));
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-outside-'));
   fs.writeFileSync(path.join(root, 'inside.txt'), 'ok');
   fs.writeFileSync(path.join(outside, 'outside.txt'), 'no');
   fs.symlinkSync(outside, path.join(root, 'escape-link'));
+  fs.symlinkSync(path.join(outside, 'outside.txt'), path.join(root, 'write-escape.txt'));
   const guard = createPathGuard(root);
 
   assert.equal(guard.resolveExisting('inside.txt'), fs.realpathSync.native(path.join(root, 'inside.txt')));
@@ -21,6 +22,8 @@ test('path guard allows files inside root and rejects escape attempts', () => {
   assert.throws(() => guard.resolveExisting('escape-link/outside.txt'));
   assert.throws(() => guard.resolveExisting('/etc/passwd'));
   assert.throws(() => guard.resolveWritable('../new.txt'));
+  assert.throws(() => guard.resolveWritable('write-escape.txt'));
+  assert.equal(guard.resolveWritable('new-inside.txt'), path.join(fs.realpathSync.native(root), 'new-inside.txt'));
 });
 
 test('external browser webContents stay sandboxed and Node-free', () => {
