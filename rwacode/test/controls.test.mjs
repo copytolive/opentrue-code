@@ -5,7 +5,7 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const renderer = fs.readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const menu = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
-const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+const main = fs.readFileSync(new URL('../electron/main-v2.cjs', import.meta.url), 'utf8');
 const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
 const source = `${renderer}\n${menu}`;
 
@@ -52,4 +52,23 @@ test('workspace file changes are watched and refreshed without manual reload', (
   assert.match(preload, /onChanged: \(handler\).*'fs:changed'/s);
   assert.match(renderer, /api\.files\.onChanged/);
   assert.match(renderer, /loadDirectory\(state\.currentDir, true\)/);
+});
+
+test('local AI bridge inserts only explicitly selected local file context into supported providers', () => {
+  assert.match(preload, /sendContext: \(relativePath, content, instruction\).*'ai:sendContext'/s);
+  assert.match(main, /function providerForUrl/);
+  assert.match(main, /chatgpt\.com/);
+  assert.match(main, /claude\.ai/);
+  assert.match(main, /gemini\.google\.com/);
+  assert.match(main, /MAX_AI_CONTEXT_BYTES/);
+  assert.match(main, /submitted: false/);
+  assert.match(menu, /Send to AI/);
+  assert.match(menu, /api\.ai\.sendContext/);
+  assert.match(menu, /Nothing is submitted automatically/);
+});
+
+test('preview initial about:blank state cannot masquerade as live', () => {
+  assert.match(main, /state: live \? 'LIVE' : 'IDLE'/);
+  assert.match(main, /did-fail-load/);
+  assert.match(menu, /preview\?\.state === 'LIVE' && \^https\?:/);
 });
