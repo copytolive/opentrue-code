@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('rwacode', {
     onTabs: (handler) => ipcRenderer.on('browser:tabs', (_event, state) => handler(state)),
     onCrash: (handler) => ipcRenderer.on('browser:crash', (_event, state) => handler(state)),
   },
+  explorer: {
+    showContextMenu: (relativePath) => ipcRenderer.invoke('explorer:contextMenu', relativePath),
+  },
   files: {
     list: (relativePath) => ipcRenderer.invoke('fs:list', relativePath),
     read: (relativePath) => ipcRenderer.invoke('fs:read', relativePath),
