@@ -75,4 +75,14 @@
     if (!menu.contains(event.target) && event.target !== button) menu.classList.remove('open');
   });
   window.addEventListener('resize', () => menu.classList.remove('open'));
+
+  // Main creates the first HOME tab immediately after loading the shell. Re-emit
+  // that state after all renderer listeners are installed so the first paint is
+  // deterministic instead of depending on an IPC timing race.
+  queueMicrotask(() => {
+    api.browser.home().catch((error) => {
+      const status = document.getElementById('statusMessage');
+      if (status) status.textContent = `Startup sync: ${error.message}`;
+    });
+  });
 })();
