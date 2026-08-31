@@ -1,6 +1,6 @@
 'use strict';
 
-const { ipcMain, shell, clipboard } = require('electron');
+const { ipcMain, shell, clipboard, Menu, BrowserWindow } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -9,6 +9,11 @@ const { createPathGuard } = require('../lib/path-guard.cjs');
 
 const CANONICAL_ROOT = '/Users/Shared/WorkspaceBersama/rwa.ms/chat-local-online';
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.tif', '.tiff', '.pdf']);
+const TEXT_EXTENSIONS = new Set([
+  '.js','.jsx','.ts','.tsx','.cjs','.mjs','.json','.md','.mdx','.txt','.css','.scss','.less','.html','.htm','.xml',
+  '.yaml','.yml','.toml','.ini','.env','.py','.go','.rs','.java','.kt','.kts','.swift','.sql','.sh','.bash','.zsh','.fish',
+  '.vue','.svelte','.astro','.rb','.php','.cs','.cpp','.cc','.c','.h','.hpp','.proto','.graphql','.gql','.csv','.tsv',
+]);
 let explorerClipboard = null;
 let guard = null;
 
@@ -31,6 +36,12 @@ async function selectedInfo(relativePath = '.') {
     relative: relativeFromAbsolute(absolute),
     type: stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other',
   };
+}
+
+function isTextCandidate(absolute) {
+  const base = path.basename(absolute);
+  if (!base.includes('.')) return /^(Dockerfile|Makefile|Procfile|LICENSE|NOTICE|README)$/i.test(base);
+  return TEXT_EXTENSIONS.has(path.extname(base).toLowerCase());
 }
 
 function uniqueDestination(parentAbsolute, sourceName) {
@@ -64,6 +75,51 @@ function openFixedMacApp(appName, absolute) {
   child.unref();
   return true;
 }
+
+ipcMain.handle('explorer:contextMenu', async (event, relativePath) => {
+  const info = await selectedInfo(relativePath);
+  if (!['file', 'directory'].includes(info.type)) throw new Error('context menu requires a file or folder');
+
+  const isFile = info.type === 'file';
+  const isFolder = info.type === 'directory';
+  const isImage = isFile && IMAGE_EXTENSIONS.has(path.extname(info.absolute).toLowerCase());
+  const canChat = isFolder || (isFile && isTextCandidate(info.absolute));
+  const canPaste = Boolean(explorerClipboard);
+  let selectedAction = null;
+
+  const choose = (action) => () => { selectedAction = action; };
+  const template = [
+    { label: 'New File…', click: choose('new-file') },
+    { label: 'New Folder…', click: choose('new-folder') },
+    { type: 'separator' },
+    { label: 'Reveal in Finder', accelerator: 'Alt+Cmd+R', click: choose('reveal') },
+    ...(isImage ? [{ label: 'Open in Images Preview', click: choose('open-image') }] : []),
+    { label: 'Open in Terminal', click: choose('open-terminal') },
+    ...(isFolder ? [{ label: 'Find in Folder…', accelerator: 'Alt+Shift+F', click: choose('find-folder') }] : []),
+    { type: 'separator' },
+    { label: isFolder ? 'Add Folder to Chat' : 'Add File to Chat', enabled: canChat, click: choose('add-chat') },
+    { type: 'separator' },
+    { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: choose('cut') },
+    { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: choose('copy') },
+    { label: 'Paste', accelerator: 'CmdOrCtrl+V', enabled: canPaste, click: choose('paste') },
+    { type: 'separator' },
+    { label: 'Copy Path', accelerator: 'Alt+Cmd+C', click: choose('copy-path') },
+    { label: 'Copy Relative Path', accelerator: 'Alt+Shift+Cmd+C', click: choose('copy-relative') },
+    { type: 'separator' },
+    { label: 'Rename…', click: choose('rename') },
+    { label: 'Delete', click: choose('delete') },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  const owner = BrowserWindow.fromWebContents(event.sender) || undefined;
+
+  return new Promise((resolve) => {
+    menu.popup({
+      window: owner,
+      callback: () => resolve({ action: selectedAction, path: info.relative, type: info.type }),
+    });
+  });
+});
 
 ipcMain.handle('fs:copyPath', async (_event, relativePath, kind = 'absolute') => {
   const info = await selectedInfo(relativePath);
