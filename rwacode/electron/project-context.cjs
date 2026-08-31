@@ -53,8 +53,8 @@ function normalizeWords(input = '') {
     if (word.length > 4 && (word.endsWith('ku') || word.endsWith('mu'))) expanded.add(word.slice(0, -2));
   }
   const synonymGroups = [
-    ['gambar','image','img','picture','screenshot','visual','preview','media'],
-    ['kiri','left','kanan','right','atas','top','bawah','bottom','tengah','center','centre'],
+    ['gambar','image','img','picture','screenshot','visual','preview','media','layout','css','style'],
+    ['kiri','left','kanan','right','atas','top','bawah','bottom','tengah','center','centre','position','transform'],
     ['tampilan','ui','layout','view','screen','style','css','html','interface'],
     ['jarak','spacing','padding','margin','gap','offset'],
     ['ukuran','size','width','height','dimension','responsive'],
