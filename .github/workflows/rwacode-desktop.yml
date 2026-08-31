@@ -1,0 +1,52 @@
+name: RWACode Desktop
+
+on:
+  push:
+    branches:
+      - feat/rwacode-browser-workspace-20260831
+    paths:
+      - 'rwacode/**'
+      - '.github/workflows/rwacode-desktop.yml'
+  pull_request:
+    paths:
+      - 'rwacode/**'
+      - '.github/workflows/rwacode-desktop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build-macos-x64:
+    runs-on: macos-13
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        working-directory: rwacode
+        run: npm install --no-audit --no-fund
+      - name: Unit and security tests
+        working-directory: rwacode
+        run: npm test
+      - name: Syntax checks
+        working-directory: rwacode
+        run: npm run check
+      - name: Build unsigned macOS x64 DMG and ZIP
+        working-directory: rwacode
+        run: npm run build:mac
+      - name: List artifacts
+        working-directory: rwacode
+        run: find dist -maxdepth 2 -type f -print
+      - name: Upload RWACode macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rwacode-macos-x64-${{ github.run_id }}
+          path: |
+            rwacode/dist/*.dmg
+            rwacode/dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
