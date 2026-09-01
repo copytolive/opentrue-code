@@ -8,17 +8,20 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check electron/bootstrap.cjs && node --check electron/ipc-guard.cjs && node --check electron/main.cjs && node --check electron/explorer-ops.cjs && node --check electron/project-context.cjs && node --check electron/agent-ipc.cjs && node --check electron/workspace-adapter.cjs && node --check electron/github-workspace.cjs && node --check electron/google-drive-workspace.cjs && node --check electron/workspace-retriever.cjs && node --check electron/agent-runner.cjs && node --check electron/transaction-engine.cjs && node --check electron/workspace-agent.cjs && node --check electron/preload.cjs && node --check control/copytolive-control-bridge.cjs && node --check src/renderer.js && node --check src/browser-menu.js && node --check src/workspace-ui.js && node --check src/real-mac-ui.js && node --check src/explorer-menu-fix.js && node --check src/agent-ui.js && node --check src/agent-responsive-fix.js && node --check scripts/preflight.mjs && node --check scripts/no-ai-api-gate.mjs && node --check scripts/build-manifest.mjs && node --check scripts/verify-build-manifest.mjs && node --check scripts/smoke-launch.mjs",
-    "check:shell": "bash -n scripts/real-mac-final.sh scripts/protect-main.sh",
+    "check": "node --check electron/bootstrap.cjs && node --check electron/ipc-guard.cjs && node --check electron/main.cjs && node --check electron/explorer-ops.cjs && node --check electron/project-context.cjs && node --check electron/agent-ipc.cjs && node --check electron/workspace-adapter.cjs && node --check electron/github-workspace.cjs && node --check electron/google-drive-workspace.cjs && node --check electron/workspace-retriever.cjs && node --check electron/agent-runner.cjs && node --check electron/transaction-engine.cjs && node --check electron/workspace-agent.cjs && node --check electron/preload.cjs && node --check control/copytolive-control-bridge.cjs && node --check src/renderer.js && node --check src/browser-menu.js && node --check src/workspace-ui.js && node --check src/real-mac-ui.js && node --check src/explorer-menu-fix.js && node --check src/agent-ui.js && node --check src/agent-responsive-fix.js && node --check scripts/preflight.mjs && node --check scripts/no-ai-api-gate.mjs && node --check scripts/build-manifest.mjs && node --check scripts/verify-build-manifest.mjs && node --check scripts/smoke-launch.mjs && node --check electron-builder.distribution.cjs",
+    "check:shell": "bash -n scripts/real-mac-final.sh scripts/protect-main.sh scripts/verify-distribution.sh scripts/configure-apple-distribution.sh scripts/distribution-final.sh",
     "verify:no-ai-api": "node scripts/no-ai-api-gate.mjs",
     "verify:static": "npm run verify:no-ai-api && node scripts/preflight.mjs && npm run check && npm run check:shell",
     "verify:fast": "npm run verify:static && npm test",
     "build:mac": "electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "build:mac:distribution": "electron-builder --config electron-builder.distribution.cjs --mac dmg zip --x64 --arm64 --publish never",
     "manifest:build": "node scripts/build-manifest.mjs",
     "verify:artifacts": "node scripts/verify-build-manifest.mjs",
+    "verify:distribution-signatures": "bash scripts/verify-distribution.sh",
     "smoke:packaged": "node scripts/smoke-launch.mjs",
     "verify:package": "npm run build:mac && npm run manifest:build && npm run verify:artifacts && npm run smoke:packaged",
-    "verify:release": "npm run verify:fast && npm run verify:package"
+    "verify:release": "npm run verify:fast && npm run verify:package",
+    "verify:distribution": "npm run verify:fast && npm run build:mac:distribution && npm run manifest:build && npm run verify:artifacts && npm run verify:distribution-signatures && npm run smoke:packaged"
   },
   "devDependencies": {
     "electron": "37.2.6",
