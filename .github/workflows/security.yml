@@ -166,3 +166,28 @@ jobs:
           path: sbom/
           if-no-files-found: error
           retention-days: 30
+
+  security-gate:
+    name: security-gate
+    if: always()
+    needs: [scope, source-security, container-security]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require complete security result
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          SOURCE_RESULT: ${{ needs.source-security.result }}
+          CONTAINER_RESULT: ${{ needs.container-security.result }}
+          CONTAINER_REQUIRED: ${{ needs.scope.outputs.container }}
+        run: |
+          set -euo pipefail
+          echo "scope=$SCOPE_RESULT source=$SOURCE_RESULT container=$CONTAINER_RESULT required=$CONTAINER_REQUIRED"
+          test "$SCOPE_RESULT" = "success"
+          test "$SOURCE_RESULT" = "success"
+          if [ "$CONTAINER_REQUIRED" = "true" ]; then
+            test "$CONTAINER_RESULT" = "success"
+          else
+            test "$CONTAINER_RESULT" = "skipped"
+          fi
+          echo "SECURITY_GATE=PASS"
