@@ -81,5 +81,6 @@ jobs:
             rwacode/dist/*.dmg
             rwacode/dist/*.zip
             rwacode/dist/build-manifest.json
+            rwacode/dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
