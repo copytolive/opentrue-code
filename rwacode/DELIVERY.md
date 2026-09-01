@@ -32,10 +32,10 @@ These commands are the source of truth. GitHub Actions orchestrates them; accept
 | G3 | source security always; container security only when relevant on PRs, full on main/schedule |
 | G4 | macOS x86_64 + arm64 DMG/ZIP build |
 | G5 | `build-manifest.json` + `SHA256SUMS` exactly match built files and candidate SHA |
-| G6 | packaged `.app` reaches shell READY, then shuts down cleanly |
+| G6 | packaged `.app` reaches explicit shell READY; runner cleanup is not confused with a user Quit action |
 | G7 | merge exact reviewed candidate SHA |
 | G8 | main commit rebuilds and publishes a public GitHub pre-release with the same verification chain |
-| G9 | physical Real-Mac acceptance: native provider input, restart persistence, Apply, exact-byte Undo |
+| G9 | physical Real-Mac acceptance: native provider input, normal quit/restart persistence, Apply, exact-byte Undo |
 
 ## Build manifest
 
@@ -45,12 +45,12 @@ No workflow is allowed to hard-code a versioned RWACode artifact filename. Versi
 
 ## Launch definition
 
-A process merely remaining alive is not launch proof. In CI smoke mode only (`RWACODE_CI_SMOKE=1`), the privileged shell writes a READY marker under the operating-system temporary directory after the local `index.html` renderer fires `did-finish-load`. The smoke runner verifies PID, app version and file-shell URL, then requires graceful SIGTERM shutdown.
+A process merely remaining alive is not launch proof. In CI smoke mode only (`RWACODE_CI_SMOKE=1`), the privileged shell writes a READY marker under the operating-system temporary directory after the local `index.html` renderer fires `did-finish-load`. The smoke runner verifies PID, app version and file-shell URL. After READY is proven, the runner terminates the process only as test cleanup; SIGTERM behavior is not treated as equivalent to a user choosing Quit on macOS.
 
 Definitions:
 
 - `CI_LAUNCH_PASS`: packaged app reaches shell READY in macOS CI.
-- `REAL_MAC_PASS`: the public/main artifact passes physical Mac interaction and exact Undo proof.
+- `REAL_MAC_PASS`: the public/main artifact passes physical Mac interaction, normal quit/restart persistence and exact Undo proof.
 - `DISTRIBUTION_READY`: additionally code-signed and notarized with Apple release credentials.
 
 Unsigned engineering previews must not be described as notarized production distributions.
