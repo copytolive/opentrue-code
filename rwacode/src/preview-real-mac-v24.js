@@ -38,6 +38,7 @@
   }
 
   function setPlaceholder(mode, detail = '') {
+    surface.classList.toggle('preview-native-active', mode === 'live' || mode === 'loading');
     const placeholder = $('previewPlaceholder');
     if (!placeholder) return;
     const icon = placeholder.querySelector('.preview-placeholder-icon');

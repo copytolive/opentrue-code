@@ -33,6 +33,11 @@ body[data-pro-shell="v2"] .preview-external-live{
 body[data-pro-shell="v2"] .preview-external-live:disabled{opacity:.42!important;cursor:not-allowed!important}
 body[data-pro-shell="v2"] .preview-fullscreen-button{min-width:112px!important;width:auto!important;padding:0 12px!important;white-space:nowrap!important;line-height:1!important}
 body[data-pro-shell="v2"] #previewReloadButton{width:38px!important;min-width:38px!important;height:36px!important}
+body[data-pro-shell="v2"] .preview-surface.preview-native-active{
+  border-color:transparent!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
 body[data-pro-shell="v2"] .preview-placeholder span{max-width:300px!important;white-space:normal!important;text-align:center!important;line-height:1.55!important}
 body[data-pro-shell="v2"] .preview-placeholder.preview-error-state .preview-placeholder-icon{border-color:#7a3443!important;background:#2b151c!important;color:#ff9aaa!important}
 body[data-pro-shell="v2"] .preview-placeholder.preview-error-state strong{color:#ffb2bd!important}
