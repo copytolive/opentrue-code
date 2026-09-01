@@ -5,10 +5,24 @@ const fsp = fs.promises;
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { createLocalWorkspaceAdapter, normalizeRelative } = require('./workspace-adapter.cjs');
-const { findExecutable } = require('./agent-runner.cjs');
 
 const MAX_PROCESS_OUTPUT = 2 * 1024 * 1024;
 const PROCESS_TIMEOUT_MS = 120000;
+const ALLOWED_TOOLS = new Set(['git','gh']);
+
+function findToolExecutable(name, env = process.env) {
+  const tool = String(name || '').trim();
+  if (!ALLOWED_TOOLS.has(tool)) return null;
+  const searchPath = String(env?.PATH || '');
+  for (const directory of searchPath.split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(directory, tool);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {}
+  }
+  return null;
+}
 
 function parseGitHubLocator(input, fallbackRef = 'main') {
   const raw = String(input || '').trim();
@@ -67,7 +81,7 @@ function runProcess(executable, args, { cwd = undefined, env = process.env, time
 
 function createGitHubWorkspaceManager({ stateRoot, env = process.env, remoteUrlFor = ({ slug }) => `https://github.com/${slug}.git`, processRunner = runProcess } = {}) {
   if (!stateRoot) throw new Error('GitHub workspace manager requires stateRoot');
-  const git = findExecutable('git', env);
+  const git = findToolExecutable('git', env);
 
   async function command(args, cwd, options = {}) {
     if (!git) throw new Error('Git is not installed or not available in PATH');
@@ -157,7 +171,7 @@ function createGitHubWorkspaceManager({ stateRoot, env = process.env, remoteUrlF
       const state = await sourceState();
       if (state.dirty) throw new Error('commit and push workspace changes before opening a pull request');
       if (!state.branch.startsWith('rwacode/')) throw new Error('pull request head must be an RWACode-managed branch');
-      const gh = findExecutable('gh', env);
+      const gh = findToolExecutable('gh', env);
       if (!gh) throw new Error('GitHub CLI (gh) is not available; install/sign in to gh before opening a PR from RWACode');
       const result = await processRunner(gh, ['pr','create','--repo',source.slug,'--head',state.branch,'--base',source.ref,'--title',cleanTitle,'--body',String(body || '').slice(0, 4000)], { cwd:workspaceRoot, env });
       const url = result.stdout.trim().split(/\s+/).find((value) => /^https:\/\/github\.com\//i.test(value)) || null;
@@ -181,10 +195,10 @@ function createGitHubWorkspaceManager({ stateRoot, env = process.env, remoteUrlF
   }
 
   function availability() {
-    return { git:{ available:Boolean(git), executable:git || null }, gh:{ available:Boolean(findExecutable('gh', env)) } };
+    return { git:{ available:Boolean(git), executable:git || null }, gh:{ available:Boolean(findToolExecutable('gh', env)) } };
   }
 
   return { mount, availability };
 }
 
-module.exports = { createGitHubWorkspaceManager, parseGitHubLocator, validateGitRef, runProcess, safeSegment };
+module.exports = { createGitHubWorkspaceManager, parseGitHubLocator, validateGitRef, runProcess, safeSegment, findToolExecutable };
