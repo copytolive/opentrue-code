@@ -1,17 +1,40 @@
 'use strict';
 
 const fs = require('node:fs');
+const fsp = fs.promises;
 const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 
-// Only runners whose current non-interactive mode can be constrained to a
-// read-only planning surface are active. Other official CLIs are still detected
-// and reported so RWACode never assumes availability or silently falls back to
-// provider DOM automation.
-const ALLOWLIST = ['claude'];
+// Only official runners with a constrained non-interactive planning mode are
+// active. Browser-provider DOM automation is never used as an agent backend.
+const ALLOWLIST = ['codex', 'claude'];
 const MAX_RUNNER_OUTPUT_BYTES = 2 * 1024 * 1024;
 const RUNNER_TIMEOUT_MS = 120000;
+const CHANGESET_SCHEMA = {
+  type:'object',
+  additionalProperties:false,
+  required:['version','summary','operations'],
+  properties:{
+    version:{ const:1 },
+    summary:{ type:'string', minLength:1, maxLength:500 },
+    operations:{
+      type:'array',
+      maxItems:24,
+      items:{
+        type:'object',
+        additionalProperties:false,
+        required:['type','path'],
+        properties:{
+          type:{ enum:['MODIFY','CREATE','RENAME','DELETE'] },
+          path:{ type:'string', minLength:1 },
+          content:{ type:'string' },
+          to:{ type:'string' },
+        },
+      },
+    },
+  },
+};
 
 function escapeRegex(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function findExecutable(name, env = process.env) {
@@ -38,7 +61,7 @@ function parseLiteralTask(task) {
 async function deterministicLiteralPlan(task, projectContext, adapter) {
   const parsed = parseLiteralTask(task);
   if (!parsed || typeof projectContext.searchText !== 'function') return null;
-  const candidates = await projectContext.searchText(`${parsed.key}=`, { limit: 80 });
+  const candidates = await projectContext.searchText(`${parsed.key}=`, { limit:80 });
   const matches = [];
   const key = escapeRegex(parsed.key);
   const assignment = new RegExp(`(^|\\n)([\\t ]*${key}[\\t ]*=[\\t ]*)([^\\r\\n]*)`, 'g');
@@ -61,11 +84,16 @@ async function deterministicLiteralPlan(task, projectContext, adapter) {
 
 function runnerPrompt(task, contextText) {
   return [
-    'You are the read-only planning runner inside RWACode.',
-    'Do not edit files. Do not create files. Do not run destructive commands.',
-    'Return ONLY a JSON object with this exact shape:',
+    'You are the planning-only coding agent inside RWACode.',
+    'The complete project context that you may use is embedded below.',
+    'Do not edit files. Do not create files. Do not use browser automation. Do not use network access.',
+    'Do not request or read browser cookies, sessions, tokens, credentials, or provider web pages.',
+    'Return ONLY a JSON ChangeSet matching this shape:',
     '{"version":1,"summary":"...","operations":[{"type":"MODIFY|CREATE|RENAME|DELETE","path":"relative/path","content":"complete UTF-8 text for CREATE/MODIFY","to":"relative/path for RENAME"}]}',
-    'Paths must be relative to the current workspace. Never include shell commands.',
+    'For MODIFY and CREATE, content must be the complete final UTF-8 file contents, not a patch.',
+    'Paths must be relative to the workspace root. Never include shell commands.',
+    'Touch the minimum set of files required for the user task. Preserve unrelated behavior.',
+    'If supplied context is insufficient to make a safe concrete edit, return an empty operations array and explain the missing context in summary.',
     '',
     contextText,
     '',
@@ -86,20 +114,28 @@ function extractJsonObject(text) {
   throw new Error('agent runner did not return a JSON ChangeSet');
 }
 
-function runProcess(executable, args, { cwd, timeoutMs = RUNNER_TIMEOUT_MS } = {}) {
+function runProcess(executable, args, { cwd, timeoutMs = RUNNER_TIMEOUT_MS, env = process.env } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd, shell:false, windowsHide:true, stdio:['ignore','pipe','pipe'], env:{ ...process.env } });
+    const child = spawn(executable, args, { cwd, shell:false, windowsHide:true, stdio:['ignore','pipe','pipe'], env:{ ...env } });
     let stdout = Buffer.alloc(0); let stderr = Buffer.alloc(0); let settled = false;
-    const timer = setTimeout(() => { if (!settled) { child.kill('SIGTERM'); reject(new Error('agent runner timed out')); } }, timeoutMs);
+    const finishReject = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill('SIGTERM');
+      reject(error);
+    };
+    const timer = setTimeout(() => finishReject(new Error('agent runner timed out')), timeoutMs);
     const append = (current, chunk) => {
       const next = Buffer.concat([current, Buffer.from(chunk)]);
-      if (next.length > MAX_RUNNER_OUTPUT_BYTES) { child.kill('SIGTERM'); throw new Error('agent runner output exceeded limit'); }
+      if (next.length > MAX_RUNNER_OUTPUT_BYTES) throw new Error('agent runner output exceeded limit');
       return next;
     };
-    child.stdout.on('data', (chunk) => { try { stdout = append(stdout, chunk); } catch (error) { reject(error); } });
-    child.stderr.on('data', (chunk) => { try { stderr = append(stderr, chunk); } catch (error) { reject(error); } });
-    child.on('error', reject);
+    child.stdout.on('data', (chunk) => { try { stdout = append(stdout, chunk); } catch (error) { finishReject(error); } });
+    child.stderr.on('data', (chunk) => { try { stderr = append(stderr, chunk); } catch (error) { finishReject(error); } });
+    child.on('error', finishReject);
     child.on('close', (code) => {
+      if (settled) return;
       settled = true; clearTimeout(timer);
       if (code !== 0) return reject(new Error(`agent runner exited ${code}: ${stderr.toString('utf8').trim().slice(0, 600)}`));
       resolve({ stdout:stdout.toString('utf8'), stderr:stderr.toString('utf8') });
@@ -113,17 +149,36 @@ function parseClaudeOutput(stdout) {
   return typeof body === 'string' ? extractJsonObject(body) : body;
 }
 
-function createAgentRunner({ root, projectContext, adapter, env = process.env } = {}) {
+async function runCodexPlanner(executable, prompt, { processRunner = runProcess, env = process.env, tempRoot = os.tmpdir() } = {}) {
+  const planningRoot = await fsp.mkdtemp(path.join(path.resolve(tempRoot), 'rwacode-codex-plan-'));
+  const schemaPath = path.join(planningRoot, 'changeset.schema.json');
+  try {
+    await fsp.writeFile(schemaPath, JSON.stringify(CHANGESET_SCHEMA), { encoding:'utf8', mode:0o600 });
+    const result = await processRunner(executable, [
+      'exec',
+      '--sandbox','read-only',
+      '--color','never',
+      '--skip-git-repo-check',
+      '--output-schema',schemaPath,
+      prompt,
+    ], { cwd:planningRoot, env });
+    return extractJsonObject(result.stdout);
+  } finally {
+    await fsp.rm(planningRoot, { recursive:true, force:true }).catch(() => {});
+  }
+}
+
+function createAgentRunner({ root, projectContext, adapter, env = process.env, executableFinder = findExecutable, processRunner = runProcess, tempRoot = os.tmpdir() } = {}) {
   if (!root || !projectContext || !adapter) throw new Error('AgentRunner requires root, projectContext, and adapter');
   function availability() {
-    const claude = findExecutable('claude', env);
-    const gemini = findExecutable('gemini', env);
-    const codex = findExecutable('codex', env);
+    const claude = executableFinder('claude', env);
+    const gemini = executableFinder('gemini', env);
+    const codex = executableFinder('codex', env);
     return {
-      localLiteral: { available:true, mode:'deterministic-safe-replacement' },
-      claude: { available:Boolean(claude), executable:claude || null, mode:'plan-read-glob-grep-only' },
-      gemini: { available:false, detected:Boolean(gemini), executable:gemini || null, mode:'disabled-headless-plan-can-auto-transition-to-yolo' },
-      codex: { available:false, detected:Boolean(codex), executable:codex || null, mode:'disabled-until-read-only-sandbox-is-reliably-enforced' },
+      localLiteral:{ available:true, mode:'deterministic-safe-replacement' },
+      codex:{ available:Boolean(codex), detected:Boolean(codex), executable:codex || null, mode:'official-cli-read-only-context-plan' },
+      claude:{ available:Boolean(claude), executable:claude || null, mode:'official-cli-plan-read-glob-grep-only' },
+      gemini:{ available:false, detected:Boolean(gemini), executable:gemini || null, mode:'disabled-headless-plan-can-auto-transition-to-yolo' },
     };
   }
 
@@ -137,25 +192,32 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env } 
     const available = availability();
     const failures = [];
 
+    if (available.codex.available) {
+      try {
+        const changeSet = await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot });
+        return { runner:'codex', changeSet, evidence:{ contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes } };
+      } catch (error) { failures.push(`Codex: ${error.message}`); }
+    }
+
     if (available.claude.available) {
       try {
         const schema = JSON.stringify({ type:'object', required:['version','summary','operations'], properties:{ version:{const:1}, summary:{type:'string'}, operations:{type:'array'} } });
-        const result = await runProcess(available.claude.executable, ['-p', prompt, '--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root });
-        return { runner:'claude', changeSet:parseClaudeOutput(result.stdout) };
+        const result = await processRunner(available.claude.executable, ['-p',prompt,'--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root, env });
+        return { runner:'claude', changeSet:parseClaudeOutput(result.stdout), evidence:{ contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes } };
       } catch (error) { failures.push(`Claude: ${error.message}`); }
     }
+
     const disabled = [];
     if (available.gemini.detected) disabled.push('Gemini CLI detected but disabled because current headless Plan Mode may auto-transition to YOLO execution');
-    if (available.codex.detected) disabled.push('Codex CLI detected but disabled until RWACode can enforce a hard read-only planning sandbox');
     const detail = failures.length
       ? failures.join(' | ')
       : disabled.length
         ? disabled.join(' | ')
-        : 'No supported official read-only coding CLI is available.';
-    throw new Error(`${detail} Sign in to an allowlisted read-only runner, or use an unambiguous literal replacement task.`);
+        : 'No supported official planning CLI is available.';
+    throw new Error(`${detail} Sign in to the official Codex CLI or Claude Code, or use an unambiguous literal replacement task. Browser-provider automation remains MANUAL_ONLY.`);
   }
 
   return { plan, availability, allowlist:[...ALLOWLIST] };
 }
 
-module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, extractJsonObject, runnerPrompt, ALLOWLIST };
+module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, extractJsonObject, runnerPrompt, runCodexPlanner, CHANGESET_SCHEMA, ALLOWLIST };
