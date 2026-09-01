@@ -39,9 +39,9 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
     if (onWorkspaceChanged) await onWorkspaceChanged(await enrich(tx));
   }});
 
-  async function plan(task, { mode = 'normal' } = {}) {
-    const result = await runner.plan(task);
-    const tx = await transactions.prepare(result.changeSet, { task, runner:result.runner });
+  async function plan(task, { mode = 'normal', provider = 'auto' } = {}) {
+    const result = await runner.plan(task, { provider });
+    const tx = await transactions.prepare(result.changeSet, { task, runner:result.runner, provider });
     activePreparedId = tx.id;
     if (String(mode).toLowerCase() === 'auto') {
       const applied = await transactions.apply(tx.id);
