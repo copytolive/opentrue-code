@@ -36,7 +36,7 @@ test('provider composer support includes the current contenteditable ChatGPT com
   assert.ok(selectors.includes('#prompt-textarea'));
 });
 
-test('project task envelope carries local project context plus only the user task as the visible task section', () => {
+test('project task envelope remains available for an explicit future project command surface', () => {
   const envelope = buildProjectTaskEnvelope('[RWACODE PROJECT CONTEXT]\nFILE=A\n[END RWACODE PROJECT CONTEXT]', 'gambar kurang ke kiri');
   assert.match(envelope, /RWACODE PROJECT CONTEXT/);
   assert.match(envelope, new RegExp(PROJECT_TASK_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -44,7 +44,7 @@ test('project task envelope carries local project context plus only the user tas
   assert.ok(envelope.endsWith(PROJECT_TASK_END));
 });
 
-test('Explorer left click no longer injects or flashes local context into the provider composer', () => {
+test('Explorer left click never injects or flashes local context into the provider composer', () => {
   assert.match(explorerSource, /Explorer selection only establishes focus/);
   assert.match(explorerSource, /tree\.addEventListener\('click'/);
   assert.doesNotMatch(explorerSource, /scheduleActiveContext/);
@@ -52,13 +52,13 @@ test('Explorer left click no longer injects or flashes local context into the pr
   assert.match(explorerSource, /tree\.addEventListener\('dblclick'/);
 });
 
-test('project-aware context is resolved only when the user actually presses Enter or clicks Send', () => {
-  assert.match(bridgeSource, /document\.addEventListener\('keydown', onKeyDown, true\)/);
-  assert.match(bridgeSource, /document\.addEventListener\('click', onClick, true\)/);
-  assert.match(bridgeSource, /event\.preventDefault\(\)/);
-  assert.match(bridgeSource, /console\.info\(marker\)/);
-  assert.match(bridgeSource, /projectContext\.build\(task\)/);
-  assert.match(bridgeSource, /buildProjectTaskEnvelope\(context\.text, task\)/);
-  assert.match(bridgeSource, /submitComposer\(wc, provider, combined, task, nonce\)/);
-  assert.match(bridgeSource, /state\.bypass/);
+test('native provider Enter and click controls are never capture-intercepted by RWACode', () => {
+  assert.doesNotMatch(bridgeSource, /installTaskInterceptor/);
+  assert.doesNotMatch(bridgeSource, /document\.addEventListener\('keydown'/);
+  assert.doesNotMatch(bridgeSource, /document\.addEventListener\('click'/);
+  assert.doesNotMatch(bridgeSource, /event\.preventDefault\(\)/);
+  assert.doesNotMatch(bridgeSource, /event\.stopImmediatePropagation\(\)/);
+  assert.doesNotMatch(bridgeSource, /console\.info\(marker\)/);
+  assert.match(bridgeSource, /async function buildProjectContext\(task\)/);
+  assert.match(bridgeSource, /return projectContext\.build/);
 });
