@@ -6,7 +6,8 @@
   style.id='rw-agent-responsive-fix';
   style.textContent=`
     .rw-agent-row{flex-wrap:wrap!important;align-content:flex-start}
-    .rw-agent-source,.rw-agent-provider,.rw-agent-mode,.rw-agent-button{flex:0 0 auto}
+    .rw-agent-source,.rw-agent-mode,.rw-agent-button{flex:0 0 auto}
+    #agentProvider{display:none!important}
     .rw-agent-locator{flex:0 1 190px;min-width:140px;max-width:190px}
     .rw-agent-input{flex:1 1 220px;min-width:180px}
     #agentUndoButton{visibility:visible!important;display:inline-flex!important;align-items:center;justify-content:center}
@@ -24,6 +25,11 @@
     @media (max-width:900px){.rw-agent-locator{flex-basis:160px;max-width:160px}.rw-agent-input{flex-basis:200px;min-width:160px}}
   `;
   document.head.appendChild(style);
+
+  // Provider planning remains an internal optional route selected automatically.
+  // The product surface stays browser-native/manual and never asks for API keys.
+  const providerSelect=document.getElementById('agentProvider');
+  if(providerSelect)providerSelect.value='auto';
 
   function restoreRailWidths(){
     try{
