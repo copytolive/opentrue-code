@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createWorkspaceRetriever } = require('../electron/workspace-retriever.cjs');
 const { createLocalWorkspaceAdapter } = require('../electron/workspace-adapter.cjs');
-const { createAgentRunner, findExecutable } = require('../electron/agent-runner.cjs');
+const { createAgentRunner, findExecutable, parseLiteralTask } = require('../electron/agent-runner.cjs');
 const { createTransactionEngine } = require('../electron/transaction-engine.cjs');
 const { createWorkspaceAgent } = require('../electron/workspace-agent.cjs');
 
@@ -41,6 +41,12 @@ test('natural task locates VALUE assignment, edits real disk, and undo restores 
   const undone = await agent.undo(applied.id);
   assert.equal(undone.status, 'UNDONE');
   assert.deepEqual(fs.readFileSync(target), before);
+});
+
+test('safe Indonesian literal shorthand without an explicit verb is accepted', () => {
+  assert.deepEqual(parseLiteralTask('RWACODEGITHUBVALUE menjadi 22222'), { key:'RWACODEGITHUBVALUE', value:'22222' });
+  assert.deepEqual(parseLiteralTask('VALUE ke 20'), { key:'VALUE', value:'20' });
+  assert.equal(parseLiteralTask('tolong ubah sesuatu'), null);
 });
 
 test('bounded index includes root files before deep directory contents can exhaust the file cap', async () => {
