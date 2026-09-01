@@ -5,8 +5,9 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../src/clean-shell.css', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
+const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
 
-test('approved screenshot keeps Explorer, native Browser and Preview as the three primary surfaces', () => {
+test('approved workbench keeps Explorer, native Browser and Preview as the three primary surfaces', () => {
   assert.match(html, /id="filesPanel"/);
   assert.match(html, /class="browser-panel"/);
   assert.match(html, /id="rightPanel"/);
@@ -16,7 +17,7 @@ test('approved screenshot keeps Explorer, native Browser and Preview as the thre
   assert.match(html, /id="inspectorTabButton"/);
 });
 
-test('screenshot geometry uses a 65px header with wide Explorer and Preview rails', () => {
+test('legacy screenshot geometry remains available under the modern hybrid override', () => {
   assert.match(css, /--files-w:370px/);
   assert.match(css, /--right-w:416px/);
   assert.match(css, /--top-h:65px/);
@@ -38,34 +39,41 @@ test('one real provider tab remains visible like a normal browser instead of col
   assert.match(html, /id="newTabButton"/);
 });
 
-test('Files and Preview widths are resizable by pointer and keyboard and persist locally', () => {
+test('Explorer and Preview widths are genuinely resizable and persisted', () => {
   assert.match(ui, /installResizer\(files, 'files'\)/);
   assert.match(ui, /installResizer\(right, 'right'\)/);
   assert.match(ui, /pointerdown/);
   assert.match(ui, /ArrowLeft/);
   assert.match(ui, /ArrowRight/);
+  assert.match(ui, /setProperty\(variable, `\$\{Math\.round\(value\)\}px`, 'important'\)/);
   assert.match(ui, /localStorage\.setItem\(`rwacode:\$\{side\}-width`/);
+  assert.match(responsive, /restoreRailWidths/);
 });
 
-test('Explorer context menu remains operational and is positioned at the pointer', () => {
+test('Explorer overflow menus are positioned for both context-click and row/header more buttons', () => {
+  assert.match(ui, /function placeMenuAt/);
   assert.match(ui, /fileTree\.addEventListener\('contextmenu'/);
-  assert.match(ui, /fileActions\.style\.left/);
-  assert.match(ui, /fileActions\.style\.top/);
-  assert.match(html, /Add selected file to Chat/);
+  assert.match(ui, /file-row-more/);
+  assert.match(ui, /fileMoreButton\.addEventListener\('click'/);
 });
 
-test('selected local file goes directly to the active AI composer without the Send-to-AI modal', () => {
-  assert.match(ui, /async function directSendSelectedFile/);
-  assert.match(ui, /await routeToAiProvider\(\)/);
-  assert.match(ui, /await api\.ai\.sendFile\(target, instruction\)/);
-  assert.match(ui, /editorSend\.onclick = directSendSelectedFile/);
-  assert.doesNotMatch(ui, /Send selected local file to AI/);
+test('Preview and Inspector are real switching tabs and hide native Preview when Inspector is active', () => {
+  assert.match(ui, /function selectRightTab/);
+  assert.match(ui, /previewTabButton\.onclick/);
+  assert.match(ui, /inspectorTabButton\.onclick/);
+  assert.match(ui, /setPreviewNativeVisible\(preview\)/);
+  assert.match(ui, /api\.preview\.setBounds\(\{ x:0, y:0, width:1, height:1 \}\)/);
+});
+
+test('native provider pages stay manual and visible UI offers no DOM bridge actions', () => {
+  assert.doesNotMatch(ui, /api\.ai\.sendFile|api\.ai\.readReply|directSendSelectedFile|routeToAiProvider/);
+  assert.match(responsive, /data-real-action=\\?"add-chat/);
+  assert.match(responsive, /node\.remove\(\)/);
 });
 
 test('failed or idle Preview collapses its native view so the dark idle canvas stays visible', () => {
   assert.match(html, /Preview idle/);
   assert.match(ui, /next === 'IDLE' \|\| next === 'ERROR'/);
-  assert.match(ui, /api\.preview\.setBounds\(\{ x: 0, y: 0, width: 1, height: 1 \}\)/);
   assert.match(css, /\.preview-placeholder\{/);
   assert.match(css, /linear-gradient\(145deg,#101924,#0a121c\)/);
 });
