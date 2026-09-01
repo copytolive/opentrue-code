@@ -11,10 +11,21 @@ let guardInstalled = false;
 function normalizeFrameUrl(value) {
   try { const parsed = new URL(String(value || '')); parsed.hash = ''; parsed.search = ''; return parsed.href; } catch { return ''; }
 }
+function hasTrustedShellPreload(webContents) {
+  const prefs = webContents?.getLastWebPreferences?.() || {};
+  return String(prefs.preload || '').endsWith(`${path.sep}preload.cjs`);
+}
 function assertTrustedIpc(event) {
-  if (!trustedSenderId || event?.sender?.id !== trustedSenderId) throw new Error('RWACode IPC rejected: untrusted sender');
-  const frameUrl = normalizeFrameUrl(event?.senderFrame?.url || event?.sender?.getURL?.());
+  const webContents = event?.sender;
+  if (!webContents || !hasTrustedShellPreload(webContents)) throw new Error('RWACode IPC rejected: untrusted sender');
+  const frameUrl = normalizeFrameUrl(event?.senderFrame?.url || webContents.getURL?.());
   if (frameUrl !== normalizeFrameUrl(SHELL_ENTRY)) throw new Error('RWACode IPC rejected: untrusted frame');
+  // browser-window-created is the primary registration path. Packaged Electron can
+  // invoke preload IPC before that lifecycle registration is observable here, so
+  // bootstrap the sender only after both the exact preload and exact shell frame
+  // have been independently verified. Provider/Preview WebContents have neither.
+  if (!trustedSenderId) trustedSenderId = webContents.id;
+  if (webContents.id !== trustedSenderId) throw new Error('RWACode IPC rejected: untrusted sender');
 }
 function installIpcGuard() {
   if (guardInstalled) return;
