@@ -9,14 +9,17 @@ const { createAgentRunner } = require('../electron/agent-runner.cjs');
 
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const chatUi = fs.readFileSync(new URL('../src/chat-first-ui.js', import.meta.url), 'utf8');
-const chatCss = fs.readFileSync(new URL('../src/chat-first.css', import.meta.url), 'utf8');
+const chatCss = fs.readFileSync(new URL('../src/chat-first-v2.css', import.meta.url), 'utf8');
 const ipc = fs.readFileSync(new URL('../electron/agent-ipc.cjs', import.meta.url), 'utf8');
+const runnerSource = fs.readFileSync(new URL('../electron/agent-runner.cjs', import.meta.url), 'utf8');
 
-test('chat-first reference surface is the visible product shell while legacy runtime stays present', () => {
-  assert.match(html, /chat-first\.css/);
+test('chat-first v2 is the visible product shell with target, reference context, and preview tools', () => {
+  assert.match(html, /chat-first-v2\.css/);
   assert.match(html, /chat-first-ui\.js/);
-  for (const text of ['ChatGPT','Claude','Gemini','DeepSeek','Context \/ Target Source','Preview','Inspector','Console','Network']) assert.match(chatUi, new RegExp(text));
-  assert.match(chatCss, /\.chat-first-active #app\{display:none!important\}/);
+  for (const text of ['Editable Target','Read-only Reference Context','ChatGPT','Claude','Gemini','DeepSeek','Preview','Inspector','Console','Network','Full Screen']) assert.match(chatUi, new RegExp(text));
+  assert.match(chatCss, /cf-preview-overlay/);
+  assert.match(chatCss, /cf-targets/);
+  assert.match(chatCss, /cf-contexts/);
 });
 
 test('chat composer owns Enter and never automates provider browser DOM', () => {
@@ -27,29 +30,37 @@ test('chat composer owns Enter and never automates provider browser DOM', () => 
   assert.doesNotMatch(chatUi, /chatgpt\.com|claude\.ai|gemini\.google\.com|deepseek\.com/);
 });
 
-test('chat-first workflow keeps Apply Git and Drive explicit', () => {
-  assert.match(chatUi, /api\.agent\.plan\(text,\{mode:'normal',source:state\.source,provider:state\.provider\}\)/);
-  assert.match(chatUi, /api\.agent\.apply\(state\.prepared\.id\)/);
-  assert.match(chatUi, /api\.agent\.undo\(state\.applied\.id\)/);
-  assert.match(chatUi, /githubAction\(state\.applied\.id,'commit'/);
-  assert.match(chatUi, /githubAction\(state\.applied\.id,'push'/);
-  assert.match(chatUi, /githubAction\(state\.applied\.id,'pr'/);
-  assert.match(chatUi, /driveAction\(state\.applied\.id,'sync'/);
+test('chat-first plan is explicitly chatOnly and separates editable target from read-only contexts', () => {
+  assert.match(chatUi, /chatOnly:true/);
+  assert.match(chatUi, /target:sourceObject\(state\.target\.type\)/);
+  assert.match(chatUi, /contextSources:activeContextSources\(\)/);
+  assert.match(ipc, /buildReferenceContext/);
+  assert.match(ipc, /extraContextText:reference\.text/);
+  assert.match(ipc, /extraContextEvidence:reference\.evidence/);
 });
 
-test('IPC forwards selected provider without adding a provider-web automation endpoint', () => {
-  assert.match(ipc, /provider:String\(options\?\.provider \|\| 'auto'\)/);
-  assert.doesNotMatch(ipc, /executeJavaScript|browserCookie|cookie|sessionToken|provider:send/);
+test('selected provider never falls back to a CLI or a different provider', async () => {
+  const projectContext = { searchText:async()=>[], build:async()=>({text:'ctx',files:['index.html'],indexedFiles:1,bytes:3}) };
+  const adapter = { readText:async()=>null };
+  const providerRunner = { availability:()=>({chatgpt:{available:false},claude:{available:false},gemini:{available:true},deepseek:{available:false}}), plan:async(provider)=>({version:1,summary:`via ${provider}`,operations:[]}) };
+  const agent = createAgentRunner({ root:process.cwd(), projectContext, adapter, env:{PATH:''}, providerRunner });
+  await assert.rejects(agent.plan('buat perubahan ui', {provider:'chatgpt',chatOnly:true}), /chatgpt official API route is not configured/);
+  const planned = await agent.plan('buat perubahan ui', {provider:'gemini',chatOnly:true});
+  assert.equal(planned.runner,'gemini-official-api');
+  assert.equal(planned.evidence.resolvedProvider,'gemini');
+  assert.equal(planned.evidence.requestedProvider,'gemini');
+  assert.equal(agent.availability().routing.cliFallback,false);
+  assert.doesNotMatch(runnerSource, /runCodexPlanner|runClaudeCli|official-cli/);
 });
 
-test('official API provider availability requires both credential and explicit model setting', () => {
+test('official provider availability requires both credential and explicit model setting', () => {
   const empty = availability({});
   for (const id of ['chatgpt','claude','gemini','deepseek']) assert.equal(empty[id].available, false);
   const ready = availability({ OPENAI_API_KEY:'x', RWACODE_OPENAI_MODEL:'model-x', ANTHROPIC_API_KEY:'y', RWACODE_ANTHROPIC_MODEL:'model-y', GEMINI_API_KEY:'z', RWACODE_GEMINI_MODEL:'model-z', DEEPSEEK_API_KEY:'d', RWACODE_DEEPSEEK_MODEL:'model-d' });
   for (const id of ['chatgpt','claude','gemini','deepseek']) assert.equal(ready[id].available, true);
 });
 
-test('provider credentials are never sent to non-official endpoint hosts', () => {
+test('provider credentials are sent only to official hosts and redirects are rejected', () => {
   assert.equal(assertOfficialEndpoint('chatgpt','https://api.openai.com/v1/responses'),'https://api.openai.com/v1/responses');
   assert.equal(assertOfficialEndpoint('claude','https://api.anthropic.com/v1/messages'),'https://api.anthropic.com/v1/messages');
   assert.equal(assertOfficialEndpoint('gemini','https://generativelanguage.googleapis.com/v1beta'),'https://generativelanguage.googleapis.com/v1beta');
@@ -58,7 +69,7 @@ test('provider credentials are never sent to non-official endpoint hosts', () =>
   assert.throws(() => createProviderChatRunner({ env:{OPENAI_API_KEY:'secret',RWACODE_OPENAI_MODEL:'model-x',RWACODE_OPENAI_ENDPOINT:'https://evil.example/v1/responses'} }), /official host/);
 });
 
-test('OpenAI-style official provider adapter returns a structured ChangeSet without writing files', async () => {
+test('OpenAI official adapter returns structured ChangeSet without browser automation', async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({url,options});
@@ -74,13 +85,13 @@ test('OpenAI-style official provider adapter returns a structured ChangeSet with
   assert.equal(calls[0].options.redirect,'error');
 });
 
-test('explicit provider selection is honored by AgentRunner', async () => {
-  const projectContext = { searchText:async()=>[], build:async()=>({text:'ctx',files:['index.html'],indexedFiles:1,bytes:3}) };
-  const adapter = { readText:async()=>null };
-  const providerRunner = { availability:()=>({chatgpt:{available:false},claude:{available:false},gemini:{available:true},deepseek:{available:false}}), plan:async(provider)=>({version:1,summary:`via ${provider}`,operations:[]}) };
-  const agent = createAgentRunner({ root:process.cwd(), projectContext, adapter, env:{PATH:''}, executableFinder:()=>null, providerRunner });
-  const planned = await agent.plan('buat perubahan ui', {provider:'gemini'});
-  assert.equal(planned.runner,'gemini-official-api');
-  assert.equal(planned.changeSet.summary,'via gemini');
-  assert.equal(planned.evidence.requestedProvider,'gemini');
+test('preview preserves real http URL, implements device bounds and fullscreen, and persists conversation state', () => {
+  assert.match(chatUi, /rwacode\.chat-first\.v2/);
+  assert.match(chatUi, /localStorage\.setItem/);
+  assert.match(chatUi, /\^https\?:\\\/\\\//);
+  assert.match(chatUi, /state\.previewMode==='tablet'/);
+  assert.match(chatUi, /state\.previewMode==='mobile'/);
+  assert.match(chatUi, /cfPreviewOverlay/);
+  assert.match(chatUi, /cfPreviewExitFullscreen/);
+  assert.doesNotMatch(chatUi, /if\(p\?\.url\)\$\('#cfPreviewUrl'\)\.value=p\.url/);
 });
