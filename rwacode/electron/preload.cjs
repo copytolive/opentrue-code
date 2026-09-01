@@ -56,10 +56,11 @@ contextBridge.exposeInMainWorld('rwacode', {
     readReply: () => ipcRenderer.invoke('ai:readReply'),
   },
   agent: {
-    status: () => ipcRenderer.invoke('agent:getStatus'),
+    status: (source) => ipcRenderer.invoke('agent:getStatus', source),
     plan: (task, options) => ipcRenderer.invoke('agent:plan', task, options),
     apply: (id) => ipcRenderer.invoke('agent:apply', id),
     undo: (id) => ipcRenderer.invoke('agent:undo', id),
+    githubAction: (id, action, payload) => ipcRenderer.invoke('agent:githubAction', id, action, payload),
     invalidate: () => ipcRenderer.invoke('agent:invalidate'),
     onChanged: (handler) => ipcRenderer.on('agent:changed', (_event, state) => handler(state)),
   },
