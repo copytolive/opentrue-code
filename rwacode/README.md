@@ -38,23 +38,27 @@ Explorer: browse/filter/refresh. Local target also supports manual UTF-8 edit, c
 
 Preview: load/reload/open externally, Desktop/Tablet/Mobile geometry, Preview/Inspector switching, Full Screen and Esc exit via the workbench parity layer.
 
-## Development
+## Canonical delivery commands
 
 ```sh
 npm ci
-npm test
-npm run check
-npm start
+npm run verify:fast
+npm run verify:package
+npm run verify:release
 ```
 
-## macOS build
+`verify:fast` is the cheap deterministic preflight. `verify:package` builds Intel + Apple Silicon packages, verifies manifest/hashes, and smoke-launches the packaged shell to READY. `verify:release` runs the complete local/release gate.
 
-```sh
-npm run build:mac
-```
+The detailed single-candidate protocol is documented in [`DELIVERY.md`](./DELIVERY.md). GitHub Actions must orchestrate these commands rather than duplicate version/architecture acceptance logic in YAML.
 
-CI builds both Intel and Apple Silicon artifacts. Production distribution requires Apple Developer ID signing and notarization; do not bypass Gatekeeper.
+## macOS packages and public builds
+
+`npm run build:mac` produces Intel and Apple Silicon DMG/ZIP packages. `npm run manifest:build` records the exact checked-out commit, package version, architecture, byte size and SHA-256 for all four files in `dist/build-manifest.json` and `dist/SHA256SUMS`.
+
+Every RWACode-affecting merge to `main` rebuilds the exact main commit and publishes a **public GitHub prerelease** after `npm run verify:release` succeeds. Public engineering previews are intentionally unsigned until Apple Developer ID signing/notarization credentials are configured; do not bypass Gatekeeper or describe an unsigned preview as a notarized production distribution.
 
 ## Acceptance boundary
 
-A green repository build proves source/build/security gates only. Login persistence, provider OAuth compatibility, click/keyboard behavior, filesystem Apply, exact byte-for-byte Undo after restart, Preview geometry and final packaged-app launch must still be exercised on the real Mac before claiming `REAL_MAC_FINAL=PASS`.
+CI launch proof requires the packaged app to reach an explicit shell READY marker after the local renderer finishes loading, not merely remain as a live PID. A green repository build therefore proves source/build/security/package launch gates.
+
+Provider OAuth/session behavior, physical click/keyboard behavior, filesystem Apply, exact byte-for-byte Undo after restart, Preview geometry and the public/main artifact still require one final Real-Mac physical acceptance before claiming `REAL_MAC_FINAL=PASS`.
