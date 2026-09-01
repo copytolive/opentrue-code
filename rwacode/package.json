@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check electron/bootstrap.cjs && node --check electron/main.cjs && node --check electron/explorer-ops.cjs && node --check electron/project-context.cjs && node --check electron/ai-bridge.cjs && node --check electron/agent-ipc.cjs && node --check electron/workspace-adapter.cjs && node --check electron/github-workspace.cjs && node --check electron/google-drive-workspace.cjs && node --check electron/workspace-retriever.cjs && node --check electron/agent-runner.cjs && node --check electron/transaction-engine.cjs && node --check electron/workspace-agent.cjs && node --check electron/preload.cjs && node --check src/renderer.js && node --check src/browser-menu.js && node --check src/workspace-ui.js && node --check src/real-mac-ui.js && node --check src/explorer-menu-fix.js && node --check src/agent-ui.js && node --check src/agent-responsive-fix.js",
+    "check": "node --check electron/bootstrap.cjs && node --check electron/main.cjs && node --check electron/explorer-ops.cjs && node --check electron/project-context.cjs && node --check electron/ai-bridge.cjs && node --check electron/agent-ipc.cjs && node --check electron/workspace-adapter.cjs && node --check electron/github-workspace.cjs && node --check electron/google-drive-workspace.cjs && node --check electron/workspace-retriever.cjs && node --check electron/provider-chat-runner.cjs && node --check electron/agent-runner.cjs && node --check electron/transaction-engine.cjs && node --check electron/workspace-agent.cjs && node --check electron/preload.cjs && node --check src/renderer.js && node --check src/browser-menu.js && node --check src/workspace-ui.js && node --check src/real-mac-ui.js && node --check src/explorer-menu-fix.js && node --check src/agent-ui.js && node --check src/agent-responsive-fix.js && node --check src/chat-first-ui.js",
     "build:mac": "electron-builder --mac dmg zip --x64 --publish never"
   },
   "devDependencies": {
@@ -17,26 +17,9 @@
   "build": {
     "appId": "com.rwacode.desktop",
     "productName": "RWACode",
-    "files": [
-      "electron/**/*",
-      "lib/**/*",
-      "src/**/*",
-      "package.json",
-      "LICENSES/**/*"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "target": [
-        {"target": "dmg", "arch": ["x64"]},
-        {"target": "zip", "arch": ["x64"]}
-      ],
-      "identity": null
-    },
-    "dmg": {
-      "title": "RWACode ${version}"
-    }
+    "files": ["electron/**/*","lib/**/*","src/**/*","package.json","LICENSES/**/*"],
+    "directories": {"output":"dist"},
+    "mac": {"category":"public.app-category.developer-tools","target":[{"target":"dmg","arch":["x64"]},{"target":"zip","arch":["x64"]}],"identity":null},
+    "dmg": {"title":"RWACode ${version}"}
   }
 }
