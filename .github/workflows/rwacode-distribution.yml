@@ -1,0 +1,113 @@
+name: RWACode Distribution Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact current main SHA to sign, notarize, and publish'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rwacode-distribution-release
+  cancel-in-progress: false
+
+jobs:
+  signed-notarized-distribution:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    env:
+      RWACODE_CANDIDATE_SHA: ${{ inputs.source_sha }}
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Require Apple distribution credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required GitHub Actions secret backing $name"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+          echo "APPLE_DISTRIBUTION_CREDENTIAL_GATE=PASS"
+
+      - name: Checkout exact requested commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove candidate is exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          ACTUAL="$(git rev-parse HEAD)"
+          MAIN="$(git rev-parse origin/main)"
+          test "$ACTUAL" = "$RWACODE_CANDIDATE_SHA"
+          test "$ACTUAL" = "$MAIN"
+          echo "RWACODE_DISTRIBUTION_EXACT_MAIN=PASS sha=$ACTUAL"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: rwacode/package-lock.json
+
+      - name: Install dependencies reproducibly
+        working-directory: rwacode
+        run: npm ci --no-audit --no-fund
+
+      - name: Materialize App Store Connect API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          export KEY_PATH
+          python3 - <<'PY'
+          import base64, os, pathlib
+          raw = base64.b64decode(os.environ['APPLE_API_KEY_P8_BASE64'], validate=True)
+          path = pathlib.Path(os.environ['KEY_PATH'])
+          path.write_bytes(raw)
+          path.chmod(0o600)
+          PY
+          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "APPLE_NOTARIZATION_KEY_MATERIALIZED=PASS"
+
+      - name: Build, sign, notarize, staple, Gatekeeper-check, and smoke-test
+        working-directory: rwacode
+        run: npm run verify:distribution
+
+      - name: Publish signed notarized distribution candidate
+        working-directory: rwacode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          TAG="rwacode-v${VERSION}-distribution-${SHORT}"
+          TITLE="RWACode ${VERSION} signed distribution ${SHORT}"
+          NOTES="Developer ID signed and Apple-notarized distribution candidate built from exact main commit ${GITHUB_SHA}. CI verified NO_AI_API, tests, both macOS architectures, SHA-256 manifest, Developer ID signature, stapled notarization ticket, Gatekeeper assessment, and packaged renderer-to-preload-to-main READY. This remains a prerelease until physical Real-Mac and clean-profile/upgrade/rollback acceptance produce DISTRIBUTION_READY=PASS."
+          ASSETS=(dist/*.dmg dist/*.zip dist/build-manifest.json dist/SHA256SUMS dist/DISTRIBUTION_ATTESTATION.txt)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+          echo "RWACODE_DISTRIBUTION_RELEASE_TAG=$TAG"
+          echo "SIGNED_NOTARIZED_DISTRIBUTION_CANDIDATE=PASS"
