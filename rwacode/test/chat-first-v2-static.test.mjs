@@ -14,7 +14,7 @@ test('final command surface is source-aware and provider-aware',()=>{
 });
 
 test('explicit provider selections are provider-pure and have no CLI fallback',()=>{
-  assert.match(runner,/chat-first-provider-pure/);
+  assert.match(runner,/provider-pure-official-api/);
   assert.match(runner,/cliFallback:false/);
   assert.match(runner,/RWACode will not fall back to another provider, CLI, browser scraping, cookies, or session reuse/);
   assert.doesNotMatch(runner,/runCodexPlanner|runClaudeCli|official-cli|spawn\(/);
