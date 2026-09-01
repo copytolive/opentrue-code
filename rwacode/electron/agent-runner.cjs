@@ -1,17 +1,14 @@
 'use strict';
 
 const fs = require('node:fs');
-const fsp = fs.promises;
 const path = require('node:path');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
 const { createProviderChatRunner } = require('./provider-chat-runner.cjs');
 
-// Automated provider web pages are never used as an agent backend. Official API
-// adapters and constrained official CLIs are the only non-literal planning routes.
-const ALLOWLIST = ['chatgpt','claude','gemini','deepseek','codex'];
-const MAX_RUNNER_OUTPUT_BYTES = 2 * 1024 * 1024;
-const RUNNER_TIMEOUT_MS = 120000;
+// Provider web pages are never used as an automated agent backend. In chat-first
+// mode a selected provider is routed only to that provider's approved official API.
+const CHAT_PROVIDERS = ['chatgpt','claude','gemini','deepseek'];
+const ALLOWLIST = [...CHAT_PROVIDERS];
 const CHANGESET_SCHEMA = {
   type:'object', additionalProperties:false, required:['version','summary','operations'],
   properties:{
@@ -66,19 +63,42 @@ async function deterministicLiteralPlan(task, projectContext, adapter) {
   return { runner:'local-literal', changeSet:{ version:1, summary:`Set ${parsed.key} to ${parsed.value}`, operations:[{ type:'MODIFY', path:file.path, content }] }, evidence:{ path:file.path, key:parsed.key, before:oldValue, after:parsed.value } };
 }
 
-function runnerPrompt(task, contextText) {
+function normalizeConversation(value) {
+  const input = Array.isArray(value) ? value : [];
+  const turns = [];
+  let chars = 0;
+  for (const item of input.slice(-16)) {
+    const role = item?.role === 'assistant' ? 'assistant' : item?.role === 'user' ? 'user' : null;
+    const text = String(item?.text || '').trim().slice(0, 4000);
+    if (!role || !text) continue;
+    if (chars + text.length > 24000) break;
+    chars += text.length;
+    turns.push({ role, text });
+  }
+  return turns;
+}
+
+function runnerPrompt(task, contextText, extraContextText = '', conversation = []) {
+  const extra = String(extraContextText || '').trim();
+  const prior = normalizeConversation(conversation);
+  const dialogue = prior.map((turn) => `${turn.role.toUpperCase()}: ${turn.text}`).join('\n\n');
   return [
     'You are the planning-only coding agent inside RWACode.',
-    'The complete project context that you may use is embedded below.',
-    'Do not edit files. Do not create files. Do not use browser automation or provider web pages.',
+    'The editable target workspace context is embedded below.',
+    'Additional reference context, when supplied, is READ-ONLY evidence and must never become a write target.',
+    'Conversation history is context only. The latest RWACode USER TASK below is the instruction to execute.',
+    'Do not edit files directly. Do not create files directly. Do not use browser automation or provider web pages.',
     'Do not request or read browser cookies, sessions, tokens, credentials, or private browser state.',
     'Return ONLY a JSON ChangeSet matching this shape:',
     '{"version":1,"summary":"...","operations":[{"type":"MODIFY|CREATE|RENAME|DELETE","path":"relative/path","content":"complete UTF-8 text for CREATE/MODIFY","to":"relative/path for RENAME"}]}',
     'For MODIFY and CREATE, content must be complete final UTF-8 file contents, never a patch.',
-    'Paths must be relative to the workspace root. Never include shell commands.',
-    'Touch the minimum set of files required for the user task. Preserve unrelated behavior.',
-    'If supplied context is insufficient to make a safe concrete edit, return an empty operations array and explain the missing context in summary.',
-    '', contextText, '', '[RWACODE USER TASK]', String(task || '').trim(), '[END RWACODE USER TASK]',
+    'Paths must be relative to the editable target workspace root. Never include shell commands.',
+    'Touch the minimum set of target files required for the user task. Preserve unrelated behavior.',
+    'If supplied target context is insufficient to make a safe concrete edit, return an empty operations array and explain the missing context in summary.',
+    '', '[RWACODE EDITABLE TARGET CONTEXT]', contextText, '[END RWACODE EDITABLE TARGET CONTEXT]',
+    ...(extra ? ['', '[RWACODE READ-ONLY REFERENCE CONTEXT]', extra, '[END RWACODE READ-ONLY REFERENCE CONTEXT]'] : []),
+    ...(dialogue ? ['', '[RWACODE PRIOR CONVERSATION]', dialogue, '[END RWACODE PRIOR CONVERSATION]'] : []),
+    '', '[RWACODE USER TASK]', String(task || '').trim(), '[END RWACODE USER TASK]',
   ].join('\n');
 }
 
@@ -91,107 +111,63 @@ function extractJsonObject(text) {
   throw new Error('agent runner did not return a JSON ChangeSet');
 }
 
-function runProcess(executable, args, { cwd, timeoutMs = RUNNER_TIMEOUT_MS, env = process.env } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd, shell:false, windowsHide:true, stdio:['ignore','pipe','pipe'], env:{ ...env } });
-    let stdout = Buffer.alloc(0); let stderr = Buffer.alloc(0); let settled = false;
-    const finishReject = (error) => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGTERM'); reject(error); };
-    const timer = setTimeout(() => finishReject(new Error('agent runner timed out')), timeoutMs);
-    const append = (current, chunk) => { const next = Buffer.concat([current, Buffer.from(chunk)]); if (next.length > MAX_RUNNER_OUTPUT_BYTES) throw new Error('agent runner output exceeded limit'); return next; };
-    child.stdout.on('data', (chunk) => { try { stdout = append(stdout, chunk); } catch (error) { finishReject(error); } });
-    child.stderr.on('data', (chunk) => { try { stderr = append(stderr, chunk); } catch (error) { finishReject(error); } });
-    child.on('error', finishReject);
-    child.on('close', (code) => { if (settled) return; settled = true; clearTimeout(timer); if (code !== 0) return reject(new Error(`agent runner exited ${code}: ${stderr.toString('utf8').trim().slice(0,600)}`)); resolve({ stdout:stdout.toString('utf8'), stderr:stderr.toString('utf8') }); });
-  });
-}
-
-function parseClaudeOutput(stdout) {
-  const parsed = JSON.parse(stdout);
-  const body = parsed.structured_output || parsed.result || parsed.response;
-  return typeof body === 'string' ? extractJsonObject(body) : body;
-}
-
-async function runCodexPlanner(executable, prompt, { processRunner = runProcess, env = process.env, tempRoot = os.tmpdir() } = {}) {
-  const planningRoot = await fsp.mkdtemp(path.join(path.resolve(tempRoot), 'rwacode-codex-plan-'));
-  const schemaPath = path.join(planningRoot, 'changeset.schema.json');
-  try {
-    await fsp.writeFile(schemaPath, JSON.stringify(CHANGESET_SCHEMA), { encoding:'utf8', mode:0o600 });
-    const result = await processRunner(executable, ['exec','--sandbox','read-only','--color','never','--skip-git-repo-check','--output-schema',schemaPath,prompt], { cwd:planningRoot, env });
-    return extractJsonObject(result.stdout);
-  } finally { await fsp.rm(planningRoot, { recursive:true, force:true }).catch(() => {}); }
-}
-
-async function runClaudeCli(executable, prompt, { processRunner, env, root }) {
-  const schema = JSON.stringify({ type:'object', required:['version','summary','operations'], properties:{ version:{const:1}, summary:{type:'string'}, operations:{type:'array'} } });
-  const result = await processRunner(executable, ['-p',prompt,'--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root, env });
-  return parseClaudeOutput(result.stdout);
-}
-
-function createAgentRunner({ root, projectContext, adapter, env = process.env, executableFinder = findExecutable, processRunner = runProcess, tempRoot = os.tmpdir(), providerRunner = null } = {}) {
+function createAgentRunner({ root, projectContext, adapter, env = process.env, providerRunner = null } = {}) {
   if (!root || !projectContext || !adapter) throw new Error('AgentRunner requires root, projectContext, and adapter');
   const chatProviders = providerRunner || createProviderChatRunner({ env });
 
   function availability() {
-    const claude = executableFinder('claude', env);
-    const gemini = executableFinder('gemini', env);
-    const codex = executableFinder('codex', env);
     return {
-      localLiteral:{ available:true, mode:'deterministic-safe-replacement' },
+      localLiteral:{ available:true, mode:'legacy-deterministic-safe-replacement' },
       providers:chatProviders.availability(),
-      codex:{ available:Boolean(codex), detected:Boolean(codex), executable:codex || null, mode:'official-cli-read-only-context-plan' },
-      claude:{ available:Boolean(claude), executable:claude || null, mode:'official-cli-plan-read-glob-grep-only' },
-      gemini:{ available:false, detected:Boolean(gemini), executable:gemini || null, mode:'disabled-headless-plan-can-auto-transition-to-yolo' },
+      routing:{ mode:'chat-first-provider-pure', providerWeb:'MANUAL_ONLY', cliFallback:false },
     };
   }
 
-  async function plan(task, { provider = 'auto' } = {}) {
+  async function plan(task, { provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [], conversation = [] } = {}) {
     const cleanTask = String(task || '').trim();
     if (!cleanTask) throw new Error('agent task is empty');
-    const literal = await deterministicLiteralPlan(cleanTask, projectContext, adapter);
-    if (literal) return literal;
+    if (!chatOnly) {
+      const literal = await deterministicLiteralPlan(cleanTask, projectContext, adapter);
+      if (literal) return literal;
+    }
 
     const context = await projectContext.build(cleanTask);
-    const prompt = runnerPrompt(cleanTask, context.text);
+    const priorConversation = normalizeConversation(conversation);
+    const prompt = runnerPrompt(cleanTask, context.text, extraContextText, priorConversation);
     const available = availability();
     const selected = String(provider || 'auto').trim().toLowerCase();
-    const evidence = { contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes, requestedProvider:selected };
-    const failures = [];
+    const evidence = {
+      contextFiles:context.files,
+      indexedFiles:context.indexedFiles,
+      contextBytes:context.bytes,
+      requestedProvider:selected,
+      chatOnly:Boolean(chatOnly),
+      conversationTurns:priorConversation.length,
+      referenceContexts:Array.isArray(extraContextEvidence) ? extraContextEvidence : [],
+    };
 
-    const tryProviderApi = async (id) => {
+    const runProvider = async (id) => {
       if (!available.providers?.[id]?.available) return null;
-      try { return { runner:`${id}-official-api`, changeSet:await chatProviders.plan(id, prompt), evidence }; }
-      catch (error) { failures.push(`${id}: ${error.message}`); return null; }
+      const changeSet = await chatProviders.plan(id, prompt);
+      return { runner:`${id}-official-api`, changeSet, evidence:{ ...evidence, resolvedProvider:id } };
     };
 
     if (selected !== 'auto') {
-      if (!['chatgpt','claude','gemini','deepseek'].includes(selected)) throw new Error(`unsupported chat provider selection: ${selected}`);
-      const apiResult = await tryProviderApi(selected); if (apiResult) return apiResult;
-      if (selected === 'chatgpt' && available.codex.available) {
-        try { return { runner:'chatgpt-openai-official-cli', changeSet:await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot }), evidence:{ ...evidence, fallback:'official-openai-codex-cli' } }; }
-        catch (error) { failures.push(`OpenAI CLI fallback: ${error.message}`); }
+      if (!CHAT_PROVIDERS.includes(selected)) throw new Error(`unsupported chat provider selection: ${selected}`);
+      if (!available.providers?.[selected]?.available) {
+        throw new Error(`${selected} official API route is not configured. RWACode will not fall back to another provider, CLI, browser scraping, cookies, or session reuse.`);
       }
-      if (selected === 'claude' && available.claude.available) {
-        try { return { runner:'claude-official-cli', changeSet:await runClaudeCli(available.claude.executable, prompt, { processRunner, env, root }), evidence:{ ...evidence, fallback:'official-claude-code-cli' } }; }
-        catch (error) { failures.push(`Claude CLI fallback: ${error.message}`); }
-      }
-      const why = failures.length ? failures.join(' | ') : `${selected} official automation is not configured`;
-      throw new Error(`${why}. Configure an official provider API route (credential + RWACode model environment) or an approved same-provider CLI fallback. Native provider web stays MANUAL_ONLY; RWACode never scrapes browser conversations.`);
+      return runProvider(selected);
     }
 
-    for (const id of ['chatgpt','claude','gemini','deepseek']) { const result = await tryProviderApi(id); if (result) return result; }
-    if (available.codex.available) {
-      try { return { runner:'openai-official-cli', changeSet:await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot }), evidence:{ ...evidence, fallback:'official-openai-codex-cli' } }; }
-      catch (error) { failures.push(`OpenAI CLI: ${error.message}`); }
+    for (const id of CHAT_PROVIDERS) {
+      if (!available.providers?.[id]?.available) continue;
+      try { return await runProvider(id); } catch {}
     }
-    if (available.claude.available) {
-      try { return { runner:'claude-official-cli', changeSet:await runClaudeCli(available.claude.executable, prompt, { processRunner, env, root }), evidence:{ ...evidence, fallback:'official-claude-code-cli' } }; }
-      catch (error) { failures.push(`Claude CLI: ${error.message}`); }
-    }
-    if (available.gemini.detected) failures.push('Gemini CLI detected but headless automation remains disabled because its safe planning boundary is not enforced here');
-    throw new Error(`${failures.join(' | ') || 'No approved provider automation route is available.'} Browser-provider automation remains MANUAL_ONLY.`);
+    throw new Error('No approved official chat provider API route is available. Configure at least one provider model + credential in the RWACode runtime environment. Native provider web remains MANUAL_ONLY.');
   }
 
   return { plan, availability, allowlist:[...ALLOWLIST] };
 }
 
-module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, extractJsonObject, runnerPrompt, runCodexPlanner, CHANGESET_SCHEMA, ALLOWLIST };
+module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, normalizeConversation, extractJsonObject, runnerPrompt, CHANGESET_SCHEMA, CHAT_PROVIDERS, ALLOWLIST };

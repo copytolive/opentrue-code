@@ -1,0 +1,40 @@
+/* RWACode chat-first v2 behavior/acceptance overrides. */
+.cf-v2 .cf-layout{grid-template-columns:340px minmax(520px,1fr) 390px;gap:8px}
+.cf-v2 .cf-left{padding-bottom:12px}
+.cf-v2 .cf-workspace-panel{height:132px}
+.cf-v2 .cf-explorer{height:330px}
+.cf-v2 .cf-targets,.cf-v2 .cf-contexts{margin-top:6px}
+.cf-v2 .cf-source-row{height:42px}
+.cf-v2 .cf-source-icon.local{background:#4366dd}
+.cf-v2 .cf-source-icon.github{background:#fff;color:#0e1117;border-radius:50%}
+.cf-v2 .cf-source-icon.googledrive{background:transparent}
+.cf-v2 .cf-context-note{margin-top:9px;color:#737c89;font-size:10px;line-height:1.45}
+.cf-v2 .cf-source-chip{border:1px solid #315844;background:#13241c;color:#83e0ad;cursor:pointer}
+.cf-v2 .cf-source-chip.secondary{cursor:default;border-color:#303845;background:#151a21;color:#aab1bc}
+.cf-v2 .cf-preview-actions{display:flex;gap:7px}
+.cf-v2 .cf-device{cursor:pointer}
+.cf-v2 .cf-device.active{border-color:#6e55e9;background:#242039;color:#fff}
+.cf-v2 .cf-fullscreen{cursor:pointer}
+.cf-v2 .cf-fullscreen:hover{background:#202630}
+.cf-v2 .cf-file-preview{max-height:540px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b0f14;border:1px solid #242b35;border-radius:8px;padding:12px;color:#cbd2dc;font-size:11px;line-height:1.55}
+.cf-v2 .cf-help-copy{font-size:13px;line-height:1.9;color:#ccd2db;padding:8px 2px 2px}
+.cf-v2 .cf-network-note{margin-top:14px;line-height:1.55}
+.cf-v2 .cf-preview-overlay{position:fixed;inset:0;z-index:10020;background:#090c11;display:grid;grid-template-rows:50px 1fr}
+.cf-v2 .cf-preview-overlay.cf-hidden{display:none!important}
+.cf-v2 .cf-preview-overlay-bar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid #262d37;background:#10151c;color:#e8ebef}
+.cf-v2 .cf-preview-overlay-bar strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100vw - 220px)}
+.cf-v2 .cf-preview-fullscreen-host{position:relative;min-width:1px;min-height:1px;background:#0a0e14}
+.cf-v2 .cf-preview-host:after{content:"";position:absolute;inset:0;border-radius:10px;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)}
+.cf-v2 .cf-right .cf-subcard{overflow:hidden}
+.cf-v2 .cf-recent-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:72%}
+.cf-v2 .cf-recent-row span:last-child{color:#7ddca7;font-size:10px}
+.cf-v2 .cf-chat-head-state span{max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-v2 .cf-chat-head-state small{max-width:270px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-v2 .cf-workspace-pill{display:inline-flex;align-items:center}
+.cf-v2 .cf-contexts .cf-source-row.active{background:#18231f}
+.cf-v2 .cf-targets .cf-source-row.active{background:#211c32;box-shadow:inset 0 0 0 1px #57428c}
+.cf-v2 .cf-composer{height:112px}
+.cf-v2 .cf-composer-top{padding-left:8px}
+.cf-v2 .cf-composer-bottom{padding-left:8px}
+@media(max-width:1450px){.cf-v2 .cf-layout{grid-template-columns:300px minmax(480px,1fr) 340px}.cf-v2 .cf-top-label{display:none}.cf-v2 .cf-provider-pill{min-width:210px}.cf-v2 .cf-explorer{height:300px}}
+@media(max-width:1180px){.cf-v2 .cf-layout{grid-template-columns:260px minmax(430px,1fr) 300px;padding:0 6px}.cf-v2 .cf-root-path{font-size:10px}.cf-v2 .cf-source-name small{display:none}.cf-v2 .cf-right .cf-tab{padding:0 8px}}

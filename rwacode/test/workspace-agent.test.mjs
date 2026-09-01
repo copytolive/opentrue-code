@@ -46,39 +46,32 @@ test('safe Indonesian literal shorthand without an explicit verb is accepted', (
   assert.equal(parseLiteralTask('tolong ubah sesuatu'), null);
 });
 
-test('free-form task uses official OpenAI CLI as isolated read-only context planner, then Transaction Engine owns writes and exact Undo', async () => {
+test('chat-only free-form task stays on selected provider; Transaction Engine owns writes and exact Undo', async () => {
   const workspace = root();
-  const planningTemp = root();
   const target = path.join(workspace, 'index.html');
   const before = Buffer.from('<!doctype html>\n<button id="old">Old</button>\n');
   fs.writeFileSync(target, before);
   const adapter = createLocalWorkspaceAdapter({ root:workspace });
   const retriever = createWorkspaceRetriever({ root:workspace });
   const calls = [];
-  const executableFinder = (name) => name === 'codex' ? '/mock/bin/codex' : null;
-  const processRunner = async (executable, args, options) => {
-    calls.push({ executable, args, options });
-    assert.equal(executable, '/mock/bin/codex');
-    assert.equal(args[0], 'exec');
-    assert.deepEqual(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2), ['--sandbox','read-only']);
-    assert.ok(args.includes('--skip-git-repo-check'));
-    const schemaIndex = args.indexOf('--output-schema');
-    assert.ok(schemaIndex > 0);
-    assert.ok(fs.existsSync(args[schemaIndex + 1]));
-    assert.notEqual(path.resolve(options.cwd), path.resolve(workspace), 'planning cwd must not be the project root');
-    const prompt = args.at(-1);
-    assert.match(prompt, /RWACODE PROJECT CONTEXT/);
-    assert.match(prompt, /index\.html/);
-    assert.match(prompt, /tambahkan tombol Full Screen/i);
-    assert.match(prompt, /Do not edit files/);
-    return { stdout:JSON.stringify({ version:1, summary:'Add a fullscreen button', operations:[{ type:'MODIFY', path:'index.html', content:'<!doctype html>\n<button id="old">Old</button>\n<button id="fullscreen">Full Screen</button>\n' }] }), stderr:'' };
+  const providerRunner = {
+    availability:()=>({chatgpt:{available:true},claude:{available:false},gemini:{available:false},deepseek:{available:false}}),
+    plan:async(provider,prompt)=>{
+      calls.push({provider,prompt});
+      assert.equal(provider,'chatgpt');
+      assert.match(prompt,/RWACODE EDITABLE TARGET CONTEXT/);
+      assert.match(prompt,/READ-ONLY REFERENCE CONTEXT/);
+      assert.match(prompt,/tambahkan tombol Full Screen/i);
+      assert.match(prompt,/Do not edit files directly/);
+      return {version:1,summary:'Add a fullscreen button',operations:[{type:'MODIFY',path:'index.html',content:'<!doctype html>\n<button id="old">Old</button>\n<button id="fullscreen">Full Screen</button>\n'}]};
+    },
   };
-  const runner = createAgentRunner({ root:workspace, projectContext:retriever, adapter, executableFinder, processRunner, tempRoot:planningTemp });
-  const planned = await runner.plan('tambahkan tombol Full Screen yang benar-benar berfungsi tanpa merusak halaman');
-  assert.equal(planned.runner, 'openai-official-cli');
+  const runner = createAgentRunner({ root:workspace, projectContext:retriever, adapter, providerRunner });
+  const planned = await runner.plan('tambahkan tombol Full Screen yang benar-benar berfungsi tanpa merusak halaman', { provider:'chatgpt', chatOnly:true, extraContextText:'REFERENCE_ONLY=1' });
+  assert.equal(planned.runner, 'chatgpt-official-api');
+  assert.equal(planned.evidence.resolvedProvider, 'chatgpt');
   assert.deepEqual(fs.readFileSync(target), before, 'planning must never mutate the workspace');
   assert.equal(calls.length, 1);
-  assert.match(planned.changeSet.summary, /fullscreen/i);
   const tx = createTransactionEngine({ adapter });
   const prepared = await tx.prepare(planned.changeSet);
   assert.match(prepared.diff, /\+<button id="fullscreen">Full Screen<\/button>/);
@@ -145,21 +138,18 @@ test('agent transaction rejects traversal and symlink escape paths', async () =>
   await assert.rejects(tx.prepare({version:1,operations:[{type:'MODIFY',path:'escape.txt',content:'x'}]}));
 });
 
-test('runner availability is explicit; Codex is enabled only through its official read-only planner and unsafe Gemini headless execution stays disabled', () => {
+test('runner availability is explicit and chat-first routing has no CLI fallback', () => {
   const workspace = root();
   fs.writeFileSync(path.join(workspace, 'demo.txt'), 'hello\n');
   const adapter = createLocalWorkspaceAdapter({ root:workspace });
   const retriever = createWorkspaceRetriever({ root:workspace });
-  const executableFinder = (name) => name === 'codex' ? '/mock/bin/codex' : null;
-  const runner = createAgentRunner({ root:workspace, projectContext:retriever, adapter, executableFinder });
+  const providerRunner = { availability:()=>({chatgpt:{available:false},claude:{available:false},gemini:{available:false},deepseek:{available:false}}), plan:async()=>({version:1,summary:'unused',operations:[]}) };
+  const runner = createAgentRunner({ root:workspace, projectContext:retriever, adapter, providerRunner });
   const status = runner.availability();
   assert.equal(status.localLiteral.available, true);
-  assert.equal(status.codex.available, true);
-  assert.equal(status.codex.detected, true);
-  assert.match(status.codex.mode, /official-cli-read-only/);
-  assert.equal(status.claude.available, false);
-  assert.equal(status.gemini.available, false);
-  assert.equal(status.gemini.detected, false);
-  assert.match(status.gemini.mode, /disabled-headless-plan/);
+  assert.equal(status.routing.mode, 'chat-first-provider-pure');
+  assert.equal(status.routing.cliFallback, false);
+  assert.equal(status.routing.providerWeb, 'MANUAL_ONLY');
+  assert.deepEqual(runner.allowlist, ['chatgpt','claude','gemini','deepseek']);
   assert.equal(findExecutable('rwacode-command-that-must-not-exist-987654321', { PATH:'' }), null);
 });

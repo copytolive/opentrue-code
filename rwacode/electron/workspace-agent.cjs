@@ -39,8 +39,19 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
     if (onWorkspaceChanged) await onWorkspaceChanged(await enrich(tx));
   }});
 
-  async function plan(task, { mode = 'normal', provider = 'auto' } = {}) {
-    const result = await runner.plan(task, { provider });
+  async function contextForTask(task) {
+    const built = await context.build(String(task || '').trim());
+    return {
+      workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, source:workspaceAdapter.source || null },
+      text:built.text,
+      files:built.files || [],
+      indexedFiles:built.indexedFiles || 0,
+      bytes:built.bytes || 0,
+    };
+  }
+
+  async function plan(task, { mode = 'normal', provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [], conversation = [] } = {}) {
+    const result = await runner.plan(task, { provider, chatOnly, extraContextText, extraContextEvidence, conversation });
     const tx = await transactions.prepare(result.changeSet, { task, runner:result.runner, provider });
     activePreparedId = tx.id;
     if (String(mode).toLowerCase() === 'auto') {
@@ -90,14 +101,11 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
   function status() {
     return {
       workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, capabilities:workspaceAdapter.capabilities, source:workspaceAdapter.source || null },
-      runners:runner.availability(),
-      transaction:transactions.status(),
-      sourceState:lastSourceState,
-      activePreparedId,
+      runners:runner.availability(), transaction:transactions.status(), sourceState:lastSourceState, activePreparedId,
     };
   }
   function invalidate() { context.invalidate(); }
-  return { plan, apply, undo, status, invalidate, adapter:workspaceAdapter, explicitGitAction, explicitDriveAction };
+  return { plan, apply, undo, status, invalidate, contextForTask, adapter:workspaceAdapter, explicitGitAction, explicitDriveAction };
 }
 
 module.exports = { createWorkspaceAgent };
