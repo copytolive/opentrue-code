@@ -43,6 +43,26 @@ test('natural task locates VALUE assignment, edits real disk, and undo restores 
   assert.deepEqual(fs.readFileSync(target), before);
 });
 
+test('bounded index includes root files before deep directory contents can exhaust the file cap', async () => {
+  const workspace = root();
+  const target = path.join(workspace, 'RWACODE_REAL_MAC_E2E.txt');
+  fs.writeFileSync(target, 'RWACODE_REAL_MAC_E2E\nRWACODEVALUE=12345\n');
+  const crowded = path.join(workspace, '00_CROWDED');
+  fs.mkdirSync(crowded);
+  for (let index = 0; index < 2610; index += 1) {
+    fs.writeFileSync(path.join(crowded, `f-${String(index).padStart(4, '0')}.txt`), `FILLER_${index}=1\n`);
+  }
+
+  const agent = createWorkspaceAgent({ root:workspace });
+  const planned = await agent.plan('ubah RWACODEVALUE menjadi 22222');
+  assert.equal(planned.status, 'PREPARED');
+  assert.equal(planned.runner, 'local-literal');
+  assert.deepEqual(planned.touched, ['RWACODE_REAL_MAC_E2E.txt']);
+  assert.match(planned.diff, /-RWACODEVALUE=12345/);
+  assert.match(planned.diff, /\+RWACODEVALUE=22222/);
+  assert.match(fs.readFileSync(target, 'utf8'), /RWACODEVALUE=12345/);
+});
+
 test('Auto mode snapshots first, applies, and remains undoable', async () => {
   const workspace = root();
   fs.writeFileSync(path.join(workspace, 'config.txt'), 'VALUE=10\n');
