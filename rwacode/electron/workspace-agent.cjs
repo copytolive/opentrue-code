@@ -50,8 +50,8 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
     };
   }
 
-  async function plan(task, { mode = 'normal', provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [] } = {}) {
-    const result = await runner.plan(task, { provider, chatOnly, extraContextText, extraContextEvidence });
+  async function plan(task, { mode = 'normal', provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [], conversation = [] } = {}) {
+    const result = await runner.plan(task, { provider, chatOnly, extraContextText, extraContextEvidence, conversation });
     const tx = await transactions.prepare(result.changeSet, { task, runner:result.runner, provider });
     activePreparedId = tx.id;
     if (String(mode).toLowerCase() === 'auto') {
@@ -101,10 +101,7 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
   function status() {
     return {
       workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, capabilities:workspaceAdapter.capabilities, source:workspaceAdapter.source || null },
-      runners:runner.availability(),
-      transaction:transactions.status(),
-      sourceState:lastSourceState,
-      activePreparedId,
+      runners:runner.availability(), transaction:transactions.status(), sourceState:lastSourceState, activePreparedId,
     };
   }
   function invalidate() { context.invalidate(); }
