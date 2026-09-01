@@ -49,8 +49,22 @@
       if (Number.isFinite(right)) document.documentElement.style.setProperty('--right-w', `${Math.min(620, Math.max(300, right))}px`, 'important');
     } catch {}
   }
+
+  function enforcePreviewNativeBounds() {
+    const stateText = document.getElementById('signalPreview')?.textContent?.trim().toUpperCase() || 'IDLE';
+    const previewContent = document.getElementById('previewContent');
+    const previewTabActive = !previewContent?.classList.contains('hidden');
+    const rightCollapsed = document.body.classList.contains('right-collapsed');
+    const allowed = previewTabActive && !rightCollapsed && (stateText === 'LIVE' || stateText === 'LOADING');
+    if (!allowed) api.preview.setBounds({ x:0, y:0, width:1, height:1 }).catch(() => {});
+  }
+
   restoreRailWidths();
-  window.addEventListener('resize', () => requestAnimationFrame(restoreRailWidths));
+  window.addEventListener('resize', () => requestAnimationFrame(() => {
+    restoreRailWidths();
+    enforcePreviewNativeBounds();
+  }));
+  api.preview.onState(() => requestAnimationFrame(enforcePreviewNativeBounds));
 
   for (const button of document.querySelectorAll('.device-button[data-device]')) {
     button.addEventListener('click', () => requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))));
