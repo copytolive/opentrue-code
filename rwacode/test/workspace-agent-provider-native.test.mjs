@@ -18,7 +18,7 @@ test('Workspace Agent never installs provider-wide click keydown or DOM intercep
 test('Command Bar Enter handling is scoped to the RWACode-owned input only',()=>{
   assert.match(agentUi,/agentTaskInput/);
   assert.match(agentUi,/el\('agentTaskInput'\)\.addEventListener\('keydown'/);
-  assert.match(agentUi,/event\.preventDefault\(\); runTask\(\)/);
+  assert.match(agentUi,/event\.preventDefault\(\);\s*runTask\(\)/);
   assert.doesNotMatch(agentUi,/document\.addEventListener\(['"]keydown['"]/);
   assert.doesNotMatch(agentUi,/querySelectorAll\([^\n]*(?:prompt-textarea|contenteditable|send-button)/i);
 });
