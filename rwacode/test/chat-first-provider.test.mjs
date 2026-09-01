@@ -71,7 +71,7 @@ test('OpenAI-style official provider adapter returns a structured ChangeSet with
   assert.equal(calls.length,1);
   assert.equal(calls[0].url,'https://api.openai.com/v1/responses');
   assert.match(calls[0].options.headers.authorization,/^Bearer /);
-  assert.equal(calls[0].options.redirect, undefined);
+  assert.equal(calls[0].options.redirect,'error');
 });
 
 test('explicit provider selection is honored by AgentRunner', async () => {
