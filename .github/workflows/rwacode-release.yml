@@ -1,0 +1,67 @@
+name: RWACode Public Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rwacode/**'
+      - '.github/workflows/rwacode-release.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rwacode-public-release
+  cancel-in-progress: false
+
+env:
+  RWACODE_CANDIDATE_SHA: ${{ github.sha }}
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  build-and-publish:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Freeze release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "RWACODE_RELEASE_SHA=$RWACODE_CANDIDATE_SHA"
+          test "$ACTUAL" = "$RWACODE_CANDIDATE_SHA"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: rwacode/package-lock.json
+      - name: Install dependencies reproducibly
+        working-directory: rwacode
+        run: npm ci --no-audit --no-fund
+      - name: Verify exact public release candidate
+        working-directory: rwacode
+        run: npm run verify:release
+      - name: Publish public engineering preview
+        working-directory: rwacode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          TAG="rwacode-v${VERSION}-build-${SHORT}"
+          TITLE="RWACode ${VERSION} build ${SHORT}"
+          NOTES="Unsigned engineering preview built from commit ${GITHUB_SHA}. CI verifies tests, syntax, x86_64 + arm64 packages, SHA-256 manifest, and packaged shell READY. macOS distribution signing/notarization is a separate release credential gate."
+          ASSETS=(dist/*.dmg dist/*.zip dist/build-manifest.json dist/SHA256SUMS)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+          echo "RWACODE_PUBLIC_RELEASE_TAG=$TAG"
