@@ -34,16 +34,9 @@ function migrateLegacyRwacodeState(){
 migrateLegacyRwacodeState();
 function storedProfileIds(){const ids=new Set(['personal','work','trading']);try{const parsed=JSON.parse(fs.readFileSync(path.join(stableUserData,'profiles.json'),'utf8'));for(const profile of Array.isArray(parsed.profiles)?parsed.profiles:[])if(profile&&typeof profile.id==='string'&&/^[a-z0-9-]+$/.test(profile.id))ids.add(profile.id);}catch{}return[...ids];}
 async function flushBrowserState(){const sessions=storedProfileIds().map((id)=>session.fromPartition(`persist:rwacode-profile-${id}`,{cache:true}));sessions.push(session.fromPartition('persist:rwacode-preview',{cache:true}));await Promise.allSettled(sessions.map((ses)=>ses.flushStorageData()));}
-let flushInFlight=false;let flushComplete=false;let signalShutdownInFlight=false;
+let flushInFlight=false;let flushComplete=false;
 app.on('before-quit',(event)=>{if(flushComplete)return;event.preventDefault();if(flushInFlight)return;flushInFlight=true;flushBrowserState().catch(()=>{}).finally(()=>{flushComplete=true;app.quit();});});
-async function shutdownFromSignal(){
-  if(signalShutdownInFlight)return;
-  signalShutdownInFlight=true;
-  try{await flushBrowserState();}catch{}
-  flushComplete=true;
-  app.exit(0);
-}
-for(const signalName of ['SIGINT','SIGTERM'])process.on(signalName,()=>{if(app.isReady())void shutdownFromSignal();else process.exit(0);});
+for(const signalName of ['SIGINT','SIGTERM'])process.on(signalName,()=>{if(app.isReady())app.quit();else process.exit(0);});
 
 function installCiSmokeReadyMarker(){
   if(process.env.RWACODE_CI_SMOKE!=='1')return;
