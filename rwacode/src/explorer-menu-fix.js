@@ -33,9 +33,8 @@
     source.click();
   }
 
-  // Codex/Claude-Code style workflow: Explorer selection only establishes focus.
-  // It never writes project context into a provider composer. Project context is
-  // resolved when the user actually sends a task in ChatGPT/Claude/Gemini/DeepSeek.
+  // Provider pages stay native/manual. Explorer focus never writes project context
+  // into a provider composer; chat-first context is resolved by the agent bridge.
   tree.addEventListener('click', (event) => {
     if (event.button !== 0 || event.target.closest('.file-row-more')) return;
     const row = event.target.closest('.file-row[data-path]');
@@ -84,4 +83,58 @@
         setStatus(`Explorer menu: ${error?.message || String(error)}`);
       });
   }, true);
+
+  // Chat-first Explorer follows the selected Editable Target. The old filesystem
+  // methods remain untouched outside chat-first mode; GitHub/Drive reads go only
+  // through the narrow target-aware agent IPC and never become write operations.
+  if (api?.files && api?.agent?.browse && api?.agent?.readTarget) {
+    const localList = api.files.list.bind(api.files);
+    const localRead = api.files.read.bind(api.files);
+    let lastTargetIdentity = '';
+
+    function selectedTarget() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('rwacode.chat-first.v2') || '{}');
+        const target = saved?.target && typeof saved.target === 'object' ? saved.target : { type:'local' };
+        const type = String(target.type || 'local').toLowerCase();
+        if (type === 'local') return { type:'local' };
+        const locator = String(target.locator || saved?.locators?.[type] || '').trim();
+        return { type, locator };
+      } catch {
+        return { type:'local' };
+      }
+    }
+
+    function targetIdentity(target) {
+      return `${target.type}::${target.locator || ''}`;
+    }
+
+    api.files.list = async (relativePath = '.') => {
+      if (!document.body.classList.contains('chat-first-active')) return localList(relativePath);
+      const target = selectedTarget();
+      const identity = targetIdentity(target);
+      const requestedPath = identity === lastTargetIdentity ? (relativePath || '.') : '.';
+      lastTargetIdentity = identity;
+      if (target.type === 'local') return localList(requestedPath);
+      if (!target.locator) throw new Error(`Configure ${target.type} Editable Target first`);
+      return api.agent.browse(target, requestedPath);
+    };
+
+    api.files.read = async (relativePath) => {
+      if (!document.body.classList.contains('chat-first-active')) return localRead(relativePath);
+      const target = selectedTarget();
+      if (target.type === 'local') return localRead(relativePath);
+      if (!target.locator) throw new Error(`Configure ${target.type} Editable Target first`);
+      return api.agent.readTarget(target, relativePath);
+    };
+
+    // Direct chat-first target/source handlers persist their new selection before
+    // this bubbling listener runs. Refresh on the next tick so Explorer remounts
+    // from the new target root instead of carrying a path from the previous source.
+    document.addEventListener('click', (event) => {
+      const control = event.target?.closest?.('.cf-target-row, #cfSourceSave');
+      if (!control) return;
+      setTimeout(() => document.getElementById('cfExplorerRefresh')?.click(), 0);
+    });
+  }
 })();
