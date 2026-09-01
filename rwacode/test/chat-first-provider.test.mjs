@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { availability, createProviderChatRunner } = require('../electron/provider-chat-runner.cjs');
+const { availability, createProviderChatRunner, assertOfficialEndpoint } = require('../electron/provider-chat-runner.cjs');
 const { createAgentRunner } = require('../electron/agent-runner.cjs');
 
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
@@ -49,6 +49,15 @@ test('official API provider availability requires both credential and explicit m
   for (const id of ['chatgpt','claude','gemini','deepseek']) assert.equal(ready[id].available, true);
 });
 
+test('provider credentials are never sent to non-official endpoint hosts', () => {
+  assert.equal(assertOfficialEndpoint('chatgpt','https://api.openai.com/v1/responses'),'https://api.openai.com/v1/responses');
+  assert.equal(assertOfficialEndpoint('claude','https://api.anthropic.com/v1/messages'),'https://api.anthropic.com/v1/messages');
+  assert.equal(assertOfficialEndpoint('gemini','https://generativelanguage.googleapis.com/v1beta'),'https://generativelanguage.googleapis.com/v1beta');
+  assert.equal(assertOfficialEndpoint('deepseek','https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
+  assert.throws(() => assertOfficialEndpoint('chatgpt','https://example.com/v1/responses'), /official host/);
+  assert.throws(() => createProviderChatRunner({ env:{OPENAI_API_KEY:'secret',RWACODE_OPENAI_MODEL:'model-x',RWACODE_OPENAI_ENDPOINT:'https://evil.example/v1/responses'} }), /official host/);
+});
+
 test('OpenAI-style official provider adapter returns a structured ChangeSet without writing files', async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -60,7 +69,9 @@ test('OpenAI-style official provider adapter returns a structured ChangeSet with
   assert.equal(result.version,1);
   assert.equal(result.operations[0].path,'index.html');
   assert.equal(calls.length,1);
+  assert.equal(calls[0].url,'https://api.openai.com/v1/responses');
   assert.match(calls[0].options.headers.authorization,/^Bearer /);
+  assert.equal(calls[0].options.redirect, undefined);
 });
 
 test('explicit provider selection is honored by AgentRunner', async () => {
