@@ -2,34 +2,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const workspaceUi = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
-const aiBridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
-const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
+const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
+const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');
+const html=fs.readFileSync(new URL('../src/index.html',import.meta.url),'utf8');
+const renderer=fs.readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
+const agent=fs.readFileSync(new URL('../electron/agent-runner.cjs',import.meta.url),'utf8');
 
-test('native provider pages are manual-only and are never DOM automated', () => {
-  assert.match(aiBridge, /Native provider browser is MANUAL_ONLY/);
-  assert.match(aiBridge, /will not .* provider DOM/);
-  assert.doesNotMatch(aiBridge, /executeJavaScript/);
-  assert.doesNotMatch(aiBridge, /document\.querySelector/);
-  assert.doesNotMatch(aiBridge, /dispatchEvent\(new (?:InputEvent|Event)/);
-  assert.doesNotMatch(aiBridge, /execCommand\(/);
+test('provider WebContents are sandboxed Node-free native pages with no preload bridge',()=>{
+  assert.match(main,/new WebContentsView/);
+  assert.match(main,/sandbox:true/);
+  assert.match(main,/contextIsolation:true/);
+  assert.match(main,/nodeIntegration:false/);
+  assert.doesNotMatch(main,/executeJavaScript|insertCSS|removeInsertedCSS/);
 });
 
-test('provider cosmetics are a no-op so native pages are never restyled or hidden', async () => {
-  const { installProviderCosmetics } = await import('../electron/ai-bridge.cjs').then((module) => module.default || module);
-  assert.equal(await installProviderCosmetics(), false);
+test('legacy provider DOM bridge is absent from production main/preload/UI',()=>{
+  for(const source of [main,preload,html,renderer]){
+    assert.doesNotMatch(source,/ai:sendFile|ai:readReply|api\.ai|Add selected file to Chat|Review latest AI change|AI PROPOSAL|proposalPanel|aiBridgeBadge/);
+  }
 });
 
-test('workspace shell does not route selected files into provider composers', () => {
-  assert.doesNotMatch(workspaceUi, /directSendSelectedFile/);
-  assert.doesNotMatch(workspaceUi, /routeToAiProvider/);
-  assert.doesNotMatch(workspaceUi, /api\.ai\.sendFile/);
-  assert.doesNotMatch(workspaceUi, /api\.ai\.readReply/);
+test('free-form automation is provider-pure official API only',()=>{
+  assert.match(agent,/provider-pure-official-api/);
+  assert.match(agent,/providerWeb:'MANUAL_ONLY'/);
+  assert.match(agent,/cliFallback:false/);
+  assert.doesNotMatch(agent,/findExecutable|child_process|Codex CLI|Claude Code/);
 });
 
-test('legacy Add-to-Chat controls are removed from the visible workbench', () => {
-  assert.match(responsive, /data-real-action=\\?"add-chat/);
-  assert.match(responsive, /editorSendAiButton/);
-  assert.match(responsive, /editorImportAiButton/);
-  assert.match(responsive, /node\.remove\(\)/);
+test('shell CSP blocks network and executable content from privileged renderer',()=>{
+  assert.match(html,/Content-Security-Policy/);
+  assert.match(html,/script-src 'self'/);
+  assert.match(html,/connect-src 'none'/);
+  assert.match(html,/object-src 'none'/);
 });
