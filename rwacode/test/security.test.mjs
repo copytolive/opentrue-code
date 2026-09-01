@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createPathGuard } = require('../lib/path-guard.cjs');
-const { providerFromUrl, buildPrompt, extractSingleReplacement, MAX_AI_CONTEXT_BYTES, createAiBridge } = require('../electron/ai-bridge.cjs');
+const { providerFromUrl, buildPrompt, extractSingleReplacement, MAX_AI_CONTEXT_BYTES } = require('../electron/ai-bridge.cjs');
 
 test('path guard allows files inside root and rejects read/write escape attempts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rwacode-root-'));
@@ -53,13 +53,13 @@ test('AI replacement compatibility parser still requires exactly one fenced code
   assert.throws(() => extractSingleReplacement('```\na\n```\n```\nb\n```'), /exactly one fenced replacement/);
 });
 
-test('native provider bridge cannot read, inject, submit, or scrape provider DOM', async () => {
+test('native provider bridge cannot read, inject, submit, or scrape provider DOM', () => {
   const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
   const bridgeSource = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
   assert.match(main, /createAiBridge\(\{ getActiveWebContents: activeWebContents, readTextFile \}\)/);
-  const bridge = createAiBridge({ getActiveWebContents: () => ({ getURL: () => 'https://chatgpt.com/' }), readTextFile: async () => ({ path:'demo.txt', content:'hello' }) });
-  await assert.rejects(bridge.sendFile('demo.txt', 'review'), /MANUAL_ONLY/);
-  await assert.rejects(bridge.readReply(), /MANUAL_ONLY/);
+  assert.match(bridgeSource, /async function sendFile\(\)[\s\S]*throw manualOnlyError\('insert local files into'\)/);
+  assert.match(bridgeSource, /async function readReply\(\)[\s\S]*throw manualOnlyError\('scrape or read'\)/);
+  assert.match(bridgeSource, /Native provider browser is MANUAL_ONLY/);
   assert.doesNotMatch(bridgeSource, /executeJavaScript|document\.querySelector|execCommand\(|dispatchEvent\(/);
   assert.doesNotMatch(bridgeSource, /send\.click\(\)|submitted:false/);
   assert.doesNotMatch(bridgeSource, /require\(['"]node:fs['"]\)|require\(['"]fs['"]\)/);
