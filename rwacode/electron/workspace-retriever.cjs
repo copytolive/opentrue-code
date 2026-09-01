@@ -27,31 +27,38 @@ function createWorkspaceRetriever({ root }) {
   async function indexFiles() {
     if (fileCache) return fileCache;
     const files = [];
-    async function walk(relativeDir = '.', depth = 0) {
-      if (depth > 9 || files.length >= SEARCH_MAX_FILES) return;
+    const queue = [{ relativeDir:'.', depth:0 }];
+    const directoryPriority = (entry) => entry.name === '05_HANDOFF_EVIDENCE' ? 0 : entry.name === '07_RUNTIME' ? 1 : entry.name === 'rwacode' ? 2 : entry.name === 'src' ? 3 : 10;
+
+    while (queue.length && files.length < SEARCH_MAX_FILES) {
+      const { relativeDir, depth } = queue.shift();
+      if (depth > 9) continue;
       let entries = [];
-      try { entries = await fsp.readdir(guard.resolveExisting(relativeDir), { withFileTypes:true }); } catch { return; }
-      entries.sort((a,b) => {
-        const priority = (entry) => entry.name === '05_HANDOFF_EVIDENCE' ? 0 : entry.name === '07_RUNTIME' ? 1 : entry.name === 'rwacode' ? 2 : entry.name === 'src' ? 3 : 10;
-        return priority(a) - priority(b) || (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1);
-      });
-      for (const entry of entries) {
+      try { entries = await fsp.readdir(guard.resolveExisting(relativeDir), { withFileTypes:true }); } catch { continue; }
+
+      const localFiles = entries
+        .filter((entry) => entry.isFile() && entry.name !== '.DS_Store' && isSearchable(entry.name))
+        .sort((a,b) => a.name.localeCompare(b.name));
+      for (const entry of localFiles) {
         if (files.length >= SEARCH_MAX_FILES) break;
-        if (entry.name === '.DS_Store') continue;
         const rel = path.join(relativeDir === '.' ? '' : relativeDir, entry.name);
-        if (entry.isDirectory()) {
-          if (!SKIP_DIRS.has(entry.name)) await walk(rel, depth + 1);
-          continue;
-        }
-        if (!entry.isFile() || !isSearchable(entry.name)) continue;
         try {
           const absolute = guard.resolveExisting(rel);
           const stat = await fsp.stat(absolute);
           if (stat.size > 0 && stat.size <= SEARCH_MAX_FILE_BYTES) files.push({ path:rel, size:stat.size, mtimeMs:stat.mtimeMs });
         } catch {}
       }
+
+      if (depth >= 9) continue;
+      const localDirs = entries
+        .filter((entry) => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
+        .sort((a,b) => directoryPriority(a) - directoryPriority(b) || a.name.localeCompare(b.name));
+      for (const entry of localDirs) {
+        const rel = path.join(relativeDir === '.' ? '' : relativeDir, entry.name);
+        queue.push({ relativeDir:rel, depth:depth + 1 });
+      }
     }
-    await walk();
+
     fileCache = files;
     return files;
   }
