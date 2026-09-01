@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('rwacode', {
     browse: (source, relativePath) => ipcRenderer.invoke('agent:browse', source, relativePath),
     readTarget: (source, relativePath) => ipcRenderer.invoke('agent:readTarget', source, relativePath),
     plan: (task, options) => ipcRenderer.invoke('agent:plan', task, options),
+    prepareChangeSet: (input, options) => ipcRenderer.invoke('agent:prepareChangeSet', input, options),
     apply: (id) => ipcRenderer.invoke('agent:apply', id), undo: (id) => ipcRenderer.invoke('agent:undo', id),
     githubAction: (id, action, payload) => ipcRenderer.invoke('agent:githubAction', id, action, payload), driveAction: (id, action, payload) => ipcRenderer.invoke('agent:driveAction', id, action, payload), invalidate: () => ipcRenderer.invoke('agent:invalidate'), onChanged: (handler) => ipcRenderer.on('agent:changed', (_event, state) => handler(state)),
   },
@@ -30,8 +31,7 @@ contextBridge.exposeInMainWorld('rwacode', {
   },
 });
 
-// CI packaged smoke must prove the same privileged IPC path used by the visible
-// buttons, not merely that the BrowserWindow painted. This never runs in normal use.
+// CI packaged smoke proves the same privileged IPC path used by visible controls.
 if (process.env.RWACODE_CI_SMOKE === '1') {
   ipcRenderer.invoke('app:getState').then((state) => {
     ipcRenderer.send('rwacode:ci-renderer-ready', { version: state?.version || '' });
