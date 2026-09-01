@@ -21,7 +21,8 @@ const requiredBindings=[
 
 test('every visible primary shell control has implementation code',()=>{
   for(const id of requiredBindings){assert.match(html,new RegExp(`id=["']${id}["']`),`${id} must exist in shell`);assert.match(source,new RegExp(id),`${id} must have implementation code`);}
-  for(const id of ['agentWorkspaceTag','agentProvider','agentTaskInput','agentRunButton','agentUndoButton','agentApplyButton']) assert.match(agentUi,new RegExp(id));
+  for(const id of ['agentWorkspaceTag','agentTaskInput','agentRunButton','agentManualToggleButton','agentManualInput','agentReviewChangeSetButton','agentUndoButton','agentApplyButton']) assert.match(agentUi,new RegExp(id));
+  assert.doesNotMatch(agentUi,/agentProvider|ChatGPT API|Claude API|Gemini API|DeepSeek API/);
 });
 
 test('provider quick links and preview device controls have delegated handlers',()=>{
