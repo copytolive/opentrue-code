@@ -7,7 +7,9 @@ import { createRequire } from 'node:module';
 
 const require=createRequire(import.meta.url);
 const { createPathGuard }=require('../lib/path-guard.cjs');
-const { assertOfficialEndpoint, availability }=require('../electron/provider-chat-runner.cjs');
+const { createAgentRunner }=require('../electron/agent-runner.cjs');
+const { createWorkspaceRetriever }=require('../electron/workspace-retriever.cjs');
+const { createLocalWorkspaceAdapter }=require('../electron/workspace-adapter.cjs');
 const { isSensitivePath, redactSensitiveText }=require('../electron/project-context.cjs');
 
 test('path guard allows files inside root and rejects read/write escape attempts',()=>{
@@ -19,18 +21,18 @@ test('external browser webContents stay sandboxed Node-free and have no localhos
   const source=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');assert.match(source,/sandbox:\s*true/);assert.match(source,/contextIsolation:\s*true/);assert.match(source,/nodeIntegration:\s*false/);assert.doesNotMatch(source,/http\.createServer|express\(|fastify\(|listen\(/);
 });
 
-test('official provider automation is restricted to exact HTTPS API hosts',()=>{
-  assert.equal(assertOfficialEndpoint('chatgpt','https://api.openai.com/v1/responses'),'https://api.openai.com/v1/responses');assert.equal(assertOfficialEndpoint('claude','https://api.anthropic.com/v1/messages'),'https://api.anthropic.com/v1/messages');assert.throws(()=>assertOfficialEndpoint('chatgpt','https://chatgpt.com/'),/official host/);assert.throws(()=>assertOfficialEndpoint('claude','https://example.com/'),/official host/);const none=availability({});for(const id of ['chatgpt','claude','gemini','deepseek'])assert.equal(none[id].available,false);
+test('NO_AI_API runner exposes no provider API route or allowlist',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'rwacode-security-no-ai-'));try{fs.writeFileSync(path.join(root,'demo.txt'),'VALUE=1\n');const adapter=createLocalWorkspaceAdapter({root});const context=createWorkspaceRetriever({root});const runner=createAgentRunner({root,projectContext:context,adapter});const state=runner.availability();assert.equal(state.routing.mode,'NO_AI_API');assert.equal(state.routing.providerApi,false);assert.equal(state.routing.providerAutomation,false);assert.equal(state.routing.cliFallback,false);assert.deepEqual(runner.allowlist,[]);}finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
-test('secret-bearing paths and likely inline credentials are excluded or redacted before provider context',()=>{
+test('secret-bearing paths and likely inline credentials are excluded or redacted before workspace context',()=>{
   for(const value of ['.env','.env.production','.ssh/id_rsa','.aws/credentials','secret/private.pem'])assert.equal(isSensitivePath(value),true,value);const text=redactSensitiveText('SERVICE_TOKEN=synthetic-redaction-target\nauthorization: Bearer synthetic-bearer-target');assert.doesNotMatch(text,/synthetic-redaction-target|synthetic-bearer-target/);assert.match(text,/REDACTED/);
 });
 
-test('native provider bridge implementation is physically absent',()=>{
-  const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));for(const source of [main,preload])assert.doesNotMatch(source,/createAiBridge|ai:sendFile|ai:readReply|executeJavaScript|prompt-textarea|send-button/);assert.doesNotMatch(pkg.scripts.check,/ai-bridge\.cjs|chat-first-ui\.js/);
+test('provider DOM bridge and AI-provider API runner are physically absent',()=>{
+  const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));for(const source of [main,preload])assert.doesNotMatch(source,/createAiBridge|ai:sendFile|ai:readReply|executeJavaScript|prompt-textarea|send-button/);assert.doesNotMatch(pkg.scripts.check,/ai-bridge\.cjs|provider-chat-runner\.cjs|chat-first-ui\.js/);assert.equal(fs.existsSync(new URL('../electron/provider-chat-runner.cjs',import.meta.url)),false);
 });
 
 test('preload exposes only explicit allowlisted IPC methods',()=>{
-  const source=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');assert.match(source,/contextBridge\.exposeInMainWorld\('rwacode'/);assert.doesNotMatch(source,/child_process|exec\(|spawn\(|require\(['"]fs['"]\)|executeJavaScript/);
+  const source=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');assert.match(source,/contextBridge\.exposeInMainWorld\('rwacode'/);assert.match(source,/prepareChangeSet/);assert.doesNotMatch(source,/child_process|exec\(|spawn\(|require\(['"]fs['"]\)|executeJavaScript/);
 });
