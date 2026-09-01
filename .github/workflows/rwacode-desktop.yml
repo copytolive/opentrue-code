@@ -61,6 +61,33 @@ jobs:
           file "$ARM64_BIN" | tee /tmp/rwacode-arm64-file.txt
           grep -Eq 'x86_64|x86-64' /tmp/rwacode-x64-file.txt
           grep -q 'arm64' /tmp/rwacode-arm64-file.txt
+      - name: Smoke launch packaged Intel app
+        working-directory: rwacode
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANONICAL='/Users/Shared/WorkspaceBersama/rwa.ms/chat-local-online'
+          mkdir -p "$CANONICAL"
+          printf 'RWACODE_PACKAGED_LAUNCH_SMOKE\nVALUE=12345\n' > "$CANONICAL/RWACODE_PACKAGED_LAUNCH_SMOKE.txt"
+          APP_BIN='dist/mac/RWACode.app/Contents/MacOS/RWACode'
+          LOG='/tmp/rwacode-packaged-launch.log'
+          "$APP_BIN" >"$LOG" 2>&1 &
+          PID=$!
+          sleep 8
+          if ! kill -0 "$PID" 2>/dev/null; then
+            cat "$LOG"
+            echo 'PACKAGED_LAUNCH_SMOKE=FAIL'
+            exit 1
+          fi
+          echo 'PACKAGED_LAUNCH_PROCESS_ALIVE=PASS'
+          kill -TERM "$PID" 2>/dev/null || true
+          for _ in 1 2 3 4 5; do
+            if ! kill -0 "$PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if kill -0 "$PID" 2>/dev/null; then kill -KILL "$PID" 2>/dev/null || true; fi
+          wait "$PID" 2>/dev/null || true
+          echo 'PACKAGED_LAUNCH_SMOKE=PASS'
       - name: Upload RWACode macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
