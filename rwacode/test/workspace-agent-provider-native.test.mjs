@@ -28,8 +28,10 @@ test('agent bridge is narrow IPC with no localhost server or generic shell endpo
   assert.match(agentIpc, /agent:plan/);
   assert.match(agentIpc, /agent:apply/);
   assert.match(agentIpc, /agent:undo/);
+  assert.match(agentIpc, /agent:githubAction/);
   assert.doesNotMatch(agentIpc, /http\.createServer|express\(|fastify\(|listen\(|child_process|exec\(|spawn\(/);
   assert.match(preload, /agent:\s*\{/);
+  assert.match(preload, /githubAction/);
   assert.doesNotMatch(preload, /child_process|exec\(|spawn\(|require\(['"]fs['"]\)/);
 });
 
@@ -39,6 +41,18 @@ test('Workspace Agent command surface loads in the RWACode shell', () => {
     assert.match(agentUi, new RegExp(id));
   }
   assert.match(agentUi, /@Local/);
+  assert.match(agentUi, /@GitHub/);
+  assert.match(agentUi, /agentSourceLocator/);
   assert.match(agentUi, /api\.preview\.reload\(\)/);
   assert.match(agentUi, /fileRefreshButton/);
+});
+
+test('GitHub commit push and PR remain explicit shell-owned button actions', () => {
+  for (const id of ['agentCommitButton','agentPushButton','agentPrButton','agentCommitMessage','agentPrTitle']) {
+    assert.match(agentUi, new RegExp(id));
+  }
+  assert.match(agentUi, /agentCommitButton'\)\.onclick\s*=\s*commitGitHub/);
+  assert.match(agentUi, /agentPushButton'\)\.onclick\s*=\s*pushGitHub/);
+  assert.match(agentUi, /agentPrButton'\)\.onclick\s*=\s*openGitHubPr/);
+  assert.doesNotMatch(agentUi, /setTimeout\([^\n]*githubAction|setInterval\([^\n]*githubAction/);
 });
