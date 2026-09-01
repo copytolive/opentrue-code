@@ -63,12 +63,30 @@ async function deterministicLiteralPlan(task, projectContext, adapter) {
   return { runner:'local-literal', changeSet:{ version:1, summary:`Set ${parsed.key} to ${parsed.value}`, operations:[{ type:'MODIFY', path:file.path, content }] }, evidence:{ path:file.path, key:parsed.key, before:oldValue, after:parsed.value } };
 }
 
-function runnerPrompt(task, contextText, extraContextText = '') {
+function normalizeConversation(value) {
+  const input = Array.isArray(value) ? value : [];
+  const turns = [];
+  let chars = 0;
+  for (const item of input.slice(-16)) {
+    const role = item?.role === 'assistant' ? 'assistant' : item?.role === 'user' ? 'user' : null;
+    const text = String(item?.text || '').trim().slice(0, 4000);
+    if (!role || !text) continue;
+    if (chars + text.length > 24000) break;
+    chars += text.length;
+    turns.push({ role, text });
+  }
+  return turns;
+}
+
+function runnerPrompt(task, contextText, extraContextText = '', conversation = []) {
   const extra = String(extraContextText || '').trim();
+  const prior = normalizeConversation(conversation);
+  const dialogue = prior.map((turn) => `${turn.role.toUpperCase()}: ${turn.text}`).join('\n\n');
   return [
     'You are the planning-only coding agent inside RWACode.',
     'The editable target workspace context is embedded below.',
     'Additional reference context, when supplied, is READ-ONLY evidence and must never become a write target.',
+    'Conversation history is context only. The latest RWACode USER TASK below is the instruction to execute.',
     'Do not edit files directly. Do not create files directly. Do not use browser automation or provider web pages.',
     'Do not request or read browser cookies, sessions, tokens, credentials, or private browser state.',
     'Return ONLY a JSON ChangeSet matching this shape:',
@@ -79,6 +97,7 @@ function runnerPrompt(task, contextText, extraContextText = '') {
     'If supplied target context is insufficient to make a safe concrete edit, return an empty operations array and explain the missing context in summary.',
     '', '[RWACODE EDITABLE TARGET CONTEXT]', contextText, '[END RWACODE EDITABLE TARGET CONTEXT]',
     ...(extra ? ['', '[RWACODE READ-ONLY REFERENCE CONTEXT]', extra, '[END RWACODE READ-ONLY REFERENCE CONTEXT]'] : []),
+    ...(dialogue ? ['', '[RWACODE PRIOR CONVERSATION]', dialogue, '[END RWACODE PRIOR CONVERSATION]'] : []),
     '', '[RWACODE USER TASK]', String(task || '').trim(), '[END RWACODE USER TASK]',
   ].join('\n');
 }
@@ -104,19 +123,17 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env, p
     };
   }
 
-  async function plan(task, { provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [] } = {}) {
+  async function plan(task, { provider = 'auto', chatOnly = false, extraContextText = '', extraContextEvidence = [], conversation = [] } = {}) {
     const cleanTask = String(task || '').trim();
     if (!cleanTask) throw new Error('agent task is empty');
-
-    // Preserve the previously accepted literal bridge for legacy callers only.
-    // Chat-first UI passes chatOnly=true so every chat task stays on the selected AI provider route.
     if (!chatOnly) {
       const literal = await deterministicLiteralPlan(cleanTask, projectContext, adapter);
       if (literal) return literal;
     }
 
     const context = await projectContext.build(cleanTask);
-    const prompt = runnerPrompt(cleanTask, context.text, extraContextText);
+    const priorConversation = normalizeConversation(conversation);
+    const prompt = runnerPrompt(cleanTask, context.text, extraContextText, priorConversation);
     const available = availability();
     const selected = String(provider || 'auto').trim().toLowerCase();
     const evidence = {
@@ -125,6 +142,7 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env, p
       contextBytes:context.bytes,
       requestedProvider:selected,
       chatOnly:Boolean(chatOnly),
+      conversationTurns:priorConversation.length,
       referenceContexts:Array.isArray(extraContextEvidence) ? extraContextEvidence : [],
     };
 
@@ -144,7 +162,7 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env, p
 
     for (const id of CHAT_PROVIDERS) {
       if (!available.providers?.[id]?.available) continue;
-      try { return await runProvider(id); } catch (error) { /* try next configured official API only */ }
+      try { return await runProvider(id); } catch {}
     }
     throw new Error('No approved official chat provider API route is available. Configure at least one provider model + credential in the RWACode runtime environment. Native provider web remains MANUAL_ONLY.');
   }
@@ -152,4 +170,4 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env, p
   return { plan, availability, allowlist:[...ALLOWLIST] };
 }
 
-module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, extractJsonObject, runnerPrompt, CHANGESET_SCHEMA, CHAT_PROVIDERS, ALLOWLIST };
+module.exports = { createAgentRunner, findExecutable, parseLiteralTask, deterministicLiteralPlan, normalizeConversation, extractJsonObject, runnerPrompt, CHANGESET_SCHEMA, CHAT_PROVIDERS, ALLOWLIST };
