@@ -7,16 +7,30 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: bugbot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   bugbot:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout full pull request history
+      - name: Checkout exact pull request head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Verify reviewed candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          EXPECTED="${{ github.event.pull_request.head.sha }}"
+          echo "BUGBOT_CANDIDATE_SHA=$EXPECTED"
+          test "$ACTUAL" = "$EXPECTED"
       - name: Setup Node 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
