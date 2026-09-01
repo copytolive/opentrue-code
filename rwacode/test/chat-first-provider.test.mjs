@@ -10,6 +10,7 @@ const { createAgentRunner } = require('../electron/agent-runner.cjs');
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const chatUi = fs.readFileSync(new URL('../src/chat-first-ui.js', import.meta.url), 'utf8');
 const chatCss = fs.readFileSync(new URL('../src/chat-first-v2.css', import.meta.url), 'utf8');
+const explorerFix = fs.readFileSync(new URL('../src/explorer-menu-fix.js', import.meta.url), 'utf8');
 const ipc = fs.readFileSync(new URL('../electron/agent-ipc.cjs', import.meta.url), 'utf8');
 const runnerSource = fs.readFileSync(new URL('../electron/agent-runner.cjs', import.meta.url), 'utf8');
 
@@ -37,6 +38,17 @@ test('chat-first plan is explicitly chatOnly and separates editable target from 
   assert.match(ipc, /buildReferenceContext/);
   assert.match(ipc, /extraContextText:reference\.text/);
   assert.match(ipc, /extraContextEvidence:reference\.evidence/);
+});
+
+test('chat-first Explorer follows the selected editable target through narrow read-only IPC', () => {
+  assert.match(explorerFix, /rwacode\.chat-first\.v2/);
+  assert.match(explorerFix, /api\.agent\.browse\(target, requestedPath\)/);
+  assert.match(explorerFix, /api\.agent\.readTarget\(target, relativePath\)/);
+  assert.match(explorerFix, /chat-first-active/);
+  assert.match(explorerFix, /cf-target-row, #cfSourceSave/);
+  assert.match(ipc, /agent:browse/);
+  assert.match(ipc, /agent:readTarget/);
+  assert.doesNotMatch(explorerFix, /executeJavaScript|MutationObserver|chatgpt\.com|claude\.ai|gemini\.google\.com/);
 });
 
 test('selected provider never falls back to a CLI or a different provider', async () => {
