@@ -15,6 +15,7 @@ permissions:
 jobs:
   lockfile:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -23,11 +24,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: rwacode/package-lock.json
-      - name: Generate lockfile
+      - name: Generate deterministic lockfile
         working-directory: rwacode
-        run: npm install --package-lock-only --ignore-scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify npm ci from generated lockfile
+        working-directory: rwacode
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Commit lockfile if changed
         shell: bash
         run: |
