@@ -36,14 +36,16 @@ read -r -p "Apple Team ID: " TEAM_ID
   exit 1
 }
 
-base64 < "$P12_PATH" | tr -d '\n' | gh secret set MAC_CSC_LINK --repo "$REPO" --body -
-printf '%s' "$P12_PASSWORD" | gh secret set MAC_CSC_KEY_PASSWORD --repo "$REPO" --body -
-base64 < "$P8_PATH" | tr -d '\n' | gh secret set APPLE_API_KEY_P8_BASE64 --repo "$REPO" --body -
-printf '%s' "$API_KEY_ID" | gh secret set APPLE_API_KEY_ID --repo "$REPO" --body -
-printf '%s' "$API_ISSUER" | gh secret set APPLE_API_ISSUER --repo "$REPO" --body -
-printf '%s' "$TEAM_ID" | gh secret set APPLE_TEAM_ID --repo "$REPO" --body -
+# gh secret set reads the secret value from stdin when --body is omitted.
+# Never use "--body -" here: that would store the literal character "-".
+base64 < "$P12_PATH" | tr -d '\n' | gh secret set MAC_CSC_LINK --repo "$REPO"
+printf '%s' "$P12_PASSWORD" | gh secret set MAC_CSC_KEY_PASSWORD --repo "$REPO"
+base64 < "$P8_PATH" | tr -d '\n' | gh secret set APPLE_API_KEY_P8_BASE64 --repo "$REPO"
+printf '%s' "$API_KEY_ID" | gh secret set APPLE_API_KEY_ID --repo "$REPO"
+printf '%s' "$API_ISSUER" | gh secret set APPLE_API_ISSUER --repo "$REPO"
+printf '%s' "$TEAM_ID" | gh secret set APPLE_TEAM_ID --repo "$REPO"
 
-unset P12_PASSWORD
+unset P12_PASSWORD API_KEY_ID API_ISSUER TEAM_ID P12_PATH P8_PATH
 
 echo "============================================================"
 echo "APPLE_DISTRIBUTION_SECRETS=CONFIGURED"
