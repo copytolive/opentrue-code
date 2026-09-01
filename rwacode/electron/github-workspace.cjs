@@ -17,7 +17,7 @@ function parseGitHubLocator(input, fallbackRef = 'main') {
   const owner = match[1];
   const repo = match[2].replace(/\.git$/i, '');
   const ref = validateGitRef(match[3] || fallbackRef);
-  if (!owner || !repo) throw new Error('GitHub workspace owner/repository is required');
+  if (!owner || !repo || owner === '.' || owner === '..' || repo === '.' || repo === '..') throw new Error('GitHub workspace owner/repository is invalid');
   return { owner, repo, slug:`${owner}/${repo}`, ref };
 }
 
