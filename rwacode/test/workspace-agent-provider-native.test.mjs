@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const aiBridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
 const agentIpc = fs.readFileSync(new URL('../electron/agent-ipc.cjs', import.meta.url), 'utf8');
 const agentUi = fs.readFileSync(new URL('../src/agent-ui.js', import.meta.url), 'utf8');
+const agentResponsiveFix = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
 const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 
@@ -37,6 +38,7 @@ test('agent bridge is narrow IPC with no localhost server or generic shell endpo
 
 test('Workspace Agent command surface loads in the RWACode shell', () => {
   assert.match(html, /<script src="\.\/agent-ui\.js"><\/script>/);
+  assert.match(html, /<script src="\.\/agent-responsive-fix\.js"><\/script>/);
   for (const id of ['agentCommandBar','agentTaskInput','agentRunButton','agentUndoButton','agentApplyButton','agentDiff']) {
     assert.match(agentUi, new RegExp(id));
   }
@@ -55,4 +57,11 @@ test('GitHub commit push and PR remain explicit shell-owned button actions', () 
   assert.match(agentUi, /agentPushButton'\)\.onclick\s*=\s*pushGitHub/);
   assert.match(agentUi, /agentPrButton'\)\.onclick\s*=\s*openGitHubPr/);
   assert.doesNotMatch(agentUi, /setTimeout\([^\n]*githubAction|setInterval\([^\n]*githubAction/);
+});
+
+test('GitHub Undo remains visible when the center pane is too narrow for one command row', () => {
+  assert.match(agentResponsiveFix, /\.rw-agent-row\{flex-wrap:wrap!important/);
+  assert.match(agentResponsiveFix, /#agentUndoButton\{visibility:visible!important;display:inline-flex!important/);
+  assert.match(agentResponsiveFix, /\.rw-agent-input\{flex:1 1 220px;min-width:180px\}/);
+  assert.doesNotMatch(agentResponsiveFix, /querySelector|addEventListener|MutationObserver|preventDefault/);
 });
