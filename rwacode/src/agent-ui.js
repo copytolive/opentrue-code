@@ -11,14 +11,16 @@
     .browser-panel{grid-template-rows:var(--tab-h) var(--toolbar-h) auto minmax(0,1fr)!important}
     .rw-agent{border-bottom:1px solid #1c2937;background:#09121c;padding:8px 12px;display:grid;gap:7px;position:relative;z-index:20}
     .rw-agent-row{display:flex;align-items:center;gap:8px;min-width:0}
-    .rw-agent-source,.rw-agent-locator,.rw-agent-input,.rw-agent-mode,.rw-agent-button{height:34px;border:1px solid #2a394b;border-radius:8px;background:#0e1824;color:#cfd9e5;padding:0 10px}
+    .rw-agent-source,.rw-agent-locator,.rw-agent-input,.rw-agent-mode,.rw-agent-button,.rw-agent-small-input{height:34px;border:1px solid #2a394b;border-radius:8px;background:#0e1824;color:#cfd9e5;padding:0 10px}
     .rw-agent-source{border-color:rgba(85,216,146,.28);background:rgba(18,58,45,.46);color:#a9efca;font-weight:700}
     .rw-agent-locator{width:190px;background:#070e16}.rw-agent-locator.hidden{display:none}
-    .rw-agent-input{min-width:120px;flex:1;background:#070e16;color:#e7eef7;outline:none}.rw-agent-input:focus,.rw-agent-locator:focus{border-color:#4775a4;box-shadow:0 0 0 2px rgba(77,143,255,.08)}
+    .rw-agent-input{min-width:120px;flex:1;background:#070e16;color:#e7eef7;outline:none}.rw-agent-input:focus,.rw-agent-locator:focus,.rw-agent-small-input:focus{border-color:#4775a4;box-shadow:0 0 0 2px rgba(77,143,255,.08)}
+    .rw-agent-small-input{height:30px;min-width:150px;flex:1;background:#070e16;color:#e7eef7;outline:none;font-size:11px}
     .rw-agent-button.primary{border-color:#3567a0;background:#10213a;color:#edf5ff;font-weight:700}.rw-agent-button:disabled{opacity:.42;cursor:default}
     .rw-agent-meta{display:flex;align-items:center;gap:8px;min-width:0;color:#8393a7;font-size:10px}.rw-agent-meta b{color:#cfd9e5;font-weight:600}.rw-agent-meta .grow{flex:1}
-    .rw-agent-review{display:grid;grid-template-rows:auto minmax(80px,190px);gap:6px}.rw-agent-review.hidden{display:none!important}
-    .rw-agent-review-head{display:flex;align-items:center;gap:8px;color:#9eacbd;font-size:10px}.rw-agent-review-head strong{color:#e7eef6}
+    .rw-agent-review{display:grid;grid-template-rows:auto minmax(80px,190px);gap:6px}.rw-agent-review.hidden,.rw-agent-git-actions.hidden{display:none!important}
+    .rw-agent-review-head,.rw-agent-git-actions{display:flex;align-items:center;gap:8px;color:#9eacbd;font-size:10px}.rw-agent-review-head strong{color:#e7eef6}
+    .rw-agent-git-actions{padding-top:1px}.rw-agent-git-actions .rw-agent-button{height:30px}
     .rw-agent-diff{margin:0;max-height:190px;overflow:auto;border:1px solid #28384a;border-radius:8px;background:#060b11;color:#b9c6d5;padding:10px 12px;font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
   `;
   document.head.appendChild(style);
@@ -41,6 +43,14 @@
       <div class="rw-agent-review-head"><strong id="agentSummary">ChangeSet</strong><span id="agentTouched"></span><span class="grow"></span><button id="agentCancelButton" class="rw-agent-button">Cancel</button><button id="agentApplyButton" class="rw-agent-button primary">Apply</button></div>
       <pre id="agentDiff" class="rw-agent-diff"></pre>
     </div>
+    <div id="agentGitActions" class="rw-agent-git-actions hidden" aria-label="Explicit GitHub actions">
+      <strong>Explicit Git:</strong>
+      <input id="agentCommitMessage" class="rw-agent-small-input" autocomplete="off" spellcheck="false" placeholder="Commit message" />
+      <button id="agentCommitButton" class="rw-agent-button">Commit</button>
+      <button id="agentPushButton" class="rw-agent-button" disabled>Push</button>
+      <input id="agentPrTitle" class="rw-agent-small-input" autocomplete="off" spellcheck="false" placeholder="Pull request title" />
+      <button id="agentPrButton" class="rw-agent-button" disabled>Open PR</button>
+    </div>
   `;
   surface.parentNode.insertBefore(host, surface);
 
@@ -49,6 +59,8 @@
   let appliedId = null;
   let busy = false;
   let activeWorkspace = { type:'local' };
+  let gitCommitted = false;
+  let gitPushed = false;
 
   function shellStatus(message) { const node = document.getElementById('statusMessage'); if (node) node.textContent = message; }
   function resizeViews() { requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); }
@@ -59,12 +71,25 @@
     el('agentTaskInput').disabled = busy;
     el('agentWorkspaceTag').disabled = busy;
     el('agentSourceLocator').disabled = busy;
+    el('agentCommitButton').disabled = busy || gitCommitted;
+    el('agentPushButton').disabled = busy || !gitCommitted || gitPushed;
+    el('agentPrButton').disabled = busy || !gitPushed;
   }
   function setState(label, message) { el('agentState').textContent = label; el('agentStatus').textContent = message; shellStatus(`Workspace Agent · ${message}`); }
   function selectedSource() {
     const type = el('agentWorkspaceTag').value;
     if (type === 'github') return { type:'github', locator:el('agentSourceLocator').value.trim() };
     return { type:'local' };
+  }
+  function resetGitActions() {
+    gitCommitted = false;
+    gitPushed = false;
+    el('agentGitActions').classList.add('hidden');
+    el('agentCommitButton').disabled = false;
+    el('agentPushButton').disabled = true;
+    el('agentPrButton').disabled = true;
+    el('agentCommitMessage').value = '';
+    el('agentPrTitle').value = '';
   }
   function refreshWorkspace(tx = null) {
     if ((tx?.workspace?.type || activeWorkspace.type) === 'local') document.getElementById('fileRefreshButton')?.click();
@@ -106,6 +131,14 @@
     el('agentApplyButton').style.display = 'none';
     el('agentReview').classList.remove('hidden');
     el('agentScope').textContent = sourceScope(tx);
+    el('agentGitActions').classList.toggle('hidden', tx.status !== 'APPLIED');
+    if (tx.status === 'APPLIED') {
+      gitCommitted = false;
+      gitPushed = false;
+      el('agentCommitButton').disabled = false;
+      el('agentPushButton').disabled = true;
+      el('agentPrButton').disabled = true;
+    }
     resizeViews();
   }
   function runnerLabel(status) {
@@ -133,6 +166,7 @@
     if (!task) return setState('READY', 'Enter a task before Run');
     if (source.type === 'github' && !source.locator) return setState('READY', 'Enter owner/repository for @GitHub');
     hideReview();
+    resetGitActions();
     el('agentCancelButton').style.display = '';
     el('agentApplyButton').style.display = '';
     setBusy(true);
@@ -177,11 +211,56 @@
       const tx = await api.agent.undo(appliedId || undefined);
       appliedId = null;
       el('agentUndoButton').disabled = true;
+      resetGitActions();
       if (tx.workspace?.type === 'github') showGitDiff(tx); else hideReview();
       setState('UNDONE', `${tx.touched.length} file(s) restored to BEFORE state`);
       refreshWorkspace(tx);
     } catch (error) { setState('ERROR', error.message); }
     finally { setBusy(false); await refreshStatus(); }
+  }
+  async function commitGitHub() {
+    if (!appliedId || busy) return;
+    const message = el('agentCommitMessage').value.trim();
+    if (!message) return setState('APPLIED', 'Enter a commit message; no Git action performed');
+    setBusy(true);
+    setState('COMMITTING', 'explicit commit on managed rwacode/* branch…');
+    try {
+      const state = await api.agent.githubAction(appliedId, 'commit', { message });
+      gitCommitted = true;
+      el('agentUndoButton').disabled = true;
+      el('agentCommitButton').disabled = true;
+      el('agentPushButton').disabled = false;
+      el('agentDiff').textContent = state.gitDiff || '(clean Git worktree after commit)';
+      el('agentTouched').textContent = `commit local only · ahead ${state.ahead || 0}`;
+      setState('COMMITTED', `${state.branch} committed locally; Push remains explicit`);
+    } catch (error) { setState('ERROR', error.message); }
+    finally { setBusy(false); }
+  }
+  async function pushGitHub() {
+    if (!appliedId || !gitCommitted || busy) return;
+    setBusy(true);
+    setState('PUSHING', 'explicit push of managed rwacode/* branch…');
+    try {
+      const state = await api.agent.githubAction(appliedId, 'push', {});
+      gitPushed = true;
+      el('agentPushButton').disabled = true;
+      el('agentPrButton').disabled = false;
+      setState('PUSHED', `${state.branch} pushed; base branch unchanged; PR remains explicit`);
+    } catch (error) { setState('ERROR', error.message); }
+    finally { setBusy(false); }
+  }
+  async function openGitHubPr() {
+    if (!appliedId || !gitPushed || busy) return;
+    const title = el('agentPrTitle').value.trim();
+    if (!title) return setState('PUSHED', 'Enter a pull request title; no PR created');
+    setBusy(true);
+    setState('OPENING_PR', 'opening explicit GitHub pull request…');
+    try {
+      const state = await api.agent.githubAction(appliedId, 'pr', { title, body:`Created explicitly from RWACode managed workspace.\n\nTask: ${el('agentTaskInput').value.trim()}` });
+      el('agentPrButton').disabled = true;
+      setState('PR_OPENED', state.pullRequestUrl || 'pull request created');
+    } catch (error) { setState('ERROR', error.message); }
+    finally { setBusy(false); }
   }
 
   el('agentWorkspaceTag').onchange = () => {
@@ -189,13 +268,17 @@
     el('agentSourceLocator').classList.toggle('hidden', !github);
     activeWorkspace = github ? { type:'github' } : { type:'local' };
     hideReview();
+    resetGitActions();
     setState('READY', github ? 'GitHub source selected; enter owner/repository' : 'local-safe');
     el('agentScope').textContent = github ? 'managed GitHub worktree · not mounted' : 'root locked · local';
   };
   el('agentRunButton').onclick = runTask;
   el('agentApplyButton').onclick = applyPrepared;
   el('agentUndoButton').onclick = undoLast;
-  el('agentCancelButton').onclick = () => { hideReview(); setState('READY', 'prepared ChangeSet discarded; no files changed'); };
+  el('agentCommitButton').onclick = commitGitHub;
+  el('agentPushButton').onclick = pushGitHub;
+  el('agentPrButton').onclick = openGitHubPr;
+  el('agentCancelButton').onclick = () => { hideReview(); resetGitActions(); setState('READY', 'prepared ChangeSet discarded; no files changed'); };
   el('agentTaskInput').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); runTask(); }
   });
