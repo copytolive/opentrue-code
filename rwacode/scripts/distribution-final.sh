@@ -27,15 +27,27 @@ VERSION="$(node -p "require('./rwacode/package.json').version")"
 SHORT="${SHA:0:12}"
 TAG="rwacode-v${VERSION}-distribution-${SHORT}"
 
-required=(MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_API_KEY_P8_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID)
 SECRET_NAMES="$(gh secret list --repo "$REPO" --json name --jq '.[].name')"
-for name in "${required[@]}"; do
+for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_TEAM_ID; do
   grep -qx "$name" <<<"$SECRET_NAMES" || {
     echo "ERROR: missing GitHub Actions secret name: $name"
     echo "Run: bash rwacode/scripts/configure-apple-distribution.sh"
     exit 1
   }
 done
+
+if grep -qx APPLE_ID <<<"$SECRET_NAMES" && grep -qx APPLE_APP_SPECIFIC_PASSWORD <<<"$SECRET_NAMES"; then
+  echo "APPLE_NOTARIZATION_SECRET_SET=APPLE_ID"
+elif grep -qx APPLE_API_KEY_P8_BASE64 <<<"$SECRET_NAMES" \
+  && grep -qx APPLE_API_KEY_ID <<<"$SECRET_NAMES" \
+  && grep -qx APPLE_API_ISSUER <<<"$SECRET_NAMES"; then
+  echo "APPLE_NOTARIZATION_SECRET_SET=API_KEY"
+else
+  echo "ERROR: missing notarization credentials"
+  echo "Configure Apple ID + app-specific password or an App Store Connect API key."
+  echo "Run: bash rwacode/scripts/configure-apple-distribution.sh"
+  exit 1
+fi
 echo "APPLE_DISTRIBUTION_SECRET_NAMES=PASS"
 
 if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
