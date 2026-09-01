@@ -41,6 +41,13 @@ test('Preview controls remain distinct and fit a narrow rail', () => {
   assert.match(css, /preview-fullscreen-button/);
 });
 
+test('native Preview removes the shell frame only while the WebContentsView is active', () => {
+  assert.match(runtime, /surface\.classList\.toggle\('preview-native-active', mode === 'live' \|\| mode === 'loading'\)/);
+  assert.match(css, /\.preview-surface\.preview-native-active/);
+  assert.match(css, /border-color:transparent!important/);
+  assert.match(css, /border-radius:0!important/);
+});
+
 test('Inspector retains the last real Preview viewport instead of reporting hidden 0 by 0', () => {
   assert.match(runtime, /lastViewport = \{ width:0, height:0 \}/);
   assert.match(runtime, /rect\.width >= 40 && rect\.height >= 40/);
