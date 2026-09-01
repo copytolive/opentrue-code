@@ -28,8 +28,26 @@ contextBridge.exposeInMainWorld('rwacode', {
   },
   preview: {
     setBounds: (bounds) => ipcRenderer.invoke('preview:setBounds', bounds), load: (value) => ipcRenderer.invoke('preview:load', value), reload: () => ipcRenderer.invoke('preview:reload'), openExternal: () => ipcRenderer.invoke('preview:openExternal'), onState: (handler) => ipcRenderer.on('preview:state', (_event, state) => handler(state)),
+    onConsole: (handler) => ipcRenderer.on('preview:console', (_event, state) => handler(state)),
+    onNetwork: (handler) => ipcRenderer.on('preview:network', (_event, state) => handler(state)),
   },
 });
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (!document.getElementById('functionalRightPanelStyle')) {
+    const link = document.createElement('link');
+    link.id = 'functionalRightPanelStyle';
+    link.rel = 'stylesheet';
+    link.href = './functional-right-panel.css';
+    document.head.appendChild(link);
+  }
+  if (!document.getElementById('functionalRightPanelScript')) {
+    const script = document.createElement('script');
+    script.id = 'functionalRightPanelScript';
+    script.src = './functional-right-panel.js';
+    document.body.appendChild(script);
+  }
+}, { once:true });
 
 // CI packaged smoke proves the same privileged IPC path used by visible controls.
 if (process.env.RWACODE_CI_SMOKE === '1') {

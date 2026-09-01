@@ -69,4 +69,5 @@ installCiSmokeReadyMarker();
 
 require('./agent-ipc.cjs');
 require('./explorer-ops.cjs');
+require('./preview-observability.cjs');
 require('./main.cjs');
