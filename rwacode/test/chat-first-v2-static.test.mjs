@@ -37,7 +37,7 @@ test('explicit provider selections are provider-pure and have no CLI fallback', 
 });
 
 test('target and reference context are separate IPC inputs', () => {
-  assert.match(ipc, /targetSource = options\?\.target \|\| options\?\.source/);
+  assert.match(ipc, /targetSource\s*=\s*options\?\.target\s*\|\|\s*options\?\.source/);
   assert.match(ipc, /buildReferenceContext/);
   assert.match(ipc, /contextSources/);
   assert.match(ipc, /extraContextText:reference\.text/);
