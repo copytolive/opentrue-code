@@ -29,6 +29,9 @@ function safeUrl(value) {
     return parsed.toString();
   } catch { return raw; }
 }
+function isInternalElectronWarning(message, sourceId) {
+  return /Electron Security Warning/i.test(String(message || '')) && /(?:node:electron|sandbox_bundle|electron\/js2c)/i.test(String(sourceId || ''));
+}
 
 function installPreviewObservability() {
   const previewSession = session.fromPartition('persist:rwacode-preview', { cache:true });
@@ -42,12 +45,15 @@ function installPreviewObservability() {
       const details = maybe && typeof maybe === 'object'
         ? maybe
         : { level:args[1], message:args[2], line:args[3], sourceId:args[4] };
+      const message = text(details?.message || '', 4000);
+      const sourceId = safeUrl(details?.sourceId || '') || text(details?.sourceId || '', 600);
+      if (isInternalElectronWarning(message, sourceId)) return;
       send('preview:console', {
         at: Date.now(),
         level: text(details?.level || 'info', 32),
-        message: text(details?.message || '', 4000),
+        message,
         line: Number(details?.line || 0),
-        sourceId: safeUrl(details?.sourceId || '') || text(details?.sourceId || '', 600),
+        sourceId,
       });
     });
     wc.on('render-process-gone', (_event, details = {}) => {
@@ -85,4 +91,4 @@ function installPreviewObservability() {
 
 app.whenReady().then(installPreviewObservability).catch(() => {});
 
-module.exports = { installPreviewObservability };
+module.exports = { installPreviewObservability, isInternalElectronWarning };
