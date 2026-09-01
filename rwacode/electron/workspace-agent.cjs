@@ -5,7 +5,16 @@ const path=require('node:path');
 const {createLocalWorkspaceAdapter}=require('./workspace-adapter.cjs');
 const {createWorkspaceRetriever}=require('./workspace-retriever.cjs');
 const {createAgentRunner}=require('./agent-runner.cjs');
-const {createTransactionEngine}=require('./transaction-engine.cjs');
+const {createTransactionEngine,MAX_TRANSACTION_BYTES}=require('./transaction-engine.cjs');
+
+const MAX_MANUAL_CHANGESET_BYTES=MAX_TRANSACTION_BYTES+256*1024;
+function parseManualChangeSet(input){
+  if(input&&typeof input==='object'&&!Array.isArray(input))return input;
+  const raw=String(input||'').trim();
+  if(!raw)throw new Error('Paste a ChangeSet JSON before Review ChangeSet');
+  if(Buffer.byteLength(raw,'utf8')>MAX_MANUAL_CHANGESET_BYTES)throw new Error('Manual ChangeSet exceeds the review input size limit');
+  try{return JSON.parse(raw);}catch{throw new Error('Manual ChangeSet must be valid JSON');}
+}
 
 function createWorkspaceAgent({root=null,adapter=null,journalPath=null,onWorkspaceChanged=null,projectContext=null}={}){
   const workspaceAdapter=adapter||createLocalWorkspaceAdapter({root});
@@ -20,13 +29,18 @@ function createWorkspaceAgent({root=null,adapter=null,journalPath=null,onWorkspa
   async function enrich(tx){return{...tx,workspace:workspaceMeta(),sourceState:await readSourceState()};}
   const transactions=createTransactionEngine({adapter:workspaceAdapter,journal,durableDir,onApplied:async(tx)=>{context.invalidate();if(onWorkspaceChanged)await onWorkspaceChanged(await enrich(tx));}});
   async function contextForTask(task){const built=await context.build(String(task||'').trim());return{workspace:workspaceMeta(),text:built.text,files:built.files||[],indexedFiles:built.indexedFiles||0,bytes:built.bytes||0};}
-  async function plan(task,{mode='normal',provider='auto',chatOnly=false,extraContextText='',extraContextEvidence=[],conversation=[]}={}){
-    const result=await runner.plan(task,{provider,chatOnly,extraContextText,extraContextEvidence,conversation});
+  async function plan(task){
+    const result=await runner.plan(task);
     const operations=Array.isArray(result?.changeSet?.operations)?result.changeSet.operations:[];
     if(!operations.length){activePreparedId=null;return{status:'NO_CHANGE',id:null,createdAt:new Date().toISOString(),task:String(task||''),runner:result.runner,changeSet:{version:1,summary:String(result?.changeSet?.summary||'No change required').slice(0,500),operations:[]},touched:[],diff:'',undoAvailable:false,workspace:workspaceMeta(),sourceState:await readSourceState(),runnerAvailability:runner.availability(),evidence:result.evidence||null};}
-    const tx=await transactions.prepare(result.changeSet,{task,runner:result.runner,provider});activePreparedId=tx.id;
-    if(String(mode).toLowerCase()==='auto'){const applied=await transactions.apply(tx.id);activePreparedId=null;return{...(await enrich(applied)),runnerAvailability:runner.availability(),evidence:result.evidence||null};}
+    const tx=await transactions.prepare(result.changeSet,{task,runner:result.runner});activePreparedId=tx.id;
     return{...(await enrich(tx)),runnerAvailability:runner.availability(),evidence:result.evidence||null};
+  }
+  async function prepareChangeSet(input,{task='Manual ChangeSet review'}={}){
+    const changeSet=parseManualChangeSet(input);
+    const tx=await transactions.prepare(changeSet,{task:String(task||'Manual ChangeSet review'),runner:'manual-changeset'});
+    activePreparedId=tx.id;
+    return{...(await enrich(tx)),runnerAvailability:runner.availability(),evidence:{manual:true}};
   }
   async function apply(id=activePreparedId){if(!id)throw new Error('no prepared transaction');const tx=await transactions.apply(id);if(activePreparedId===id)activePreparedId=null;return enrich(tx);}
   async function undo(id){const txStatus=await transactions.status();const transactionId=id||txStatus.lastTransaction?.id||null;const driveSynced=workspaceAdapter.type==='googledrive'&&transactionId&&typeof workspaceAdapter.hasSyncedTransaction==='function'&&workspaceAdapter.hasSyncedTransaction(transactionId);if(driveSynced&&typeof workspaceAdapter.assertRollbackSync==='function')await workspaceAdapter.assertRollbackSync({transactionId});const undone=await transactions.undo(transactionId||undefined);if(driveSynced&&typeof workspaceAdapter.rollbackSync==='function')await workspaceAdapter.rollbackSync({transactionId});return enrich(undone);}
@@ -34,6 +48,6 @@ function createWorkspaceAgent({root=null,adapter=null,journalPath=null,onWorkspa
   async function explicitDriveAction(action,payload={},transactionId=null){if(workspaceAdapter.type!=='googledrive')throw new Error('Google Drive action requires an @GoogleDrive workspace');const last=(await transactions.status()).lastTransaction;if(!last||last.status!=='APPLIED')throw new Error('Google Drive sync requires an applied RWACode transaction');if(transactionId&&last.id!==transactionId)throw new Error('Google Drive action transaction does not match the active applied transaction');if(action==='sync')return workspaceAdapter.syncBack({transactionId:last.id,paths:last.touched,...payload});throw new Error('unsupported explicit Google Drive action');}
   async function status(){return{workspace:workspaceMeta(),runners:runner.availability(),transaction:await transactions.status(),sourceState:lastSourceState,activePreparedId};}
   function invalidate(){context.invalidate();}
-  return{plan,apply,undo,status,invalidate,contextForTask,adapter:workspaceAdapter,explicitGitAction,explicitDriveAction};
+  return{plan,prepareChangeSet,apply,undo,status,invalidate,contextForTask,adapter:workspaceAdapter,explicitGitAction,explicitDriveAction};
 }
-module.exports={createWorkspaceAgent};
+module.exports={createWorkspaceAgent,parseManualChangeSet,MAX_MANUAL_CHANGESET_BYTES};
