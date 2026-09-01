@@ -33,8 +33,9 @@
     source.click();
   }
 
-  // Provider pages stay native/manual. Explorer focus never writes project context
-  // into a provider composer; chat-first context is resolved by the agent bridge.
+  // Explorer selection only establishes focus. Provider pages stay native/manual.
+  // Selection never writes project context into a provider composer; chat-first
+  // context is resolved by the agent bridge when the user sends a task.
   tree.addEventListener('click', (event) => {
     if (event.button !== 0 || event.target.closest('.file-row-more')) return;
     const row = event.target.closest('.file-row[data-path]');
