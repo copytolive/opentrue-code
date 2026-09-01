@@ -30,12 +30,13 @@ test('mobile and tablet preview are visibly centered device rectangles', () => {
   assert.match(ui, /window\.dispatchEvent\(new Event\('resize'\)\)/);
 });
 
-test('Explorer menu keeps a short useful VS Code-like operation set', () => {
+test('Explorer menu keeps a short useful VS Code-like operation set without provider-chat routing', () => {
   for (const label of [
     'New File…', 'New Folder…', 'Reveal in Finder', 'Open in Images Preview',
-    'Open in Terminal', 'Find in Folder…', 'Add Folder to Chat',
+    'Open in Terminal', 'Find in Folder…',
     'Cut', 'Copy', 'Paste', 'Copy Path', 'Copy Relative Path', 'Rename…', 'Delete',
   ]) assert.ok(ui.includes(label), `missing Explorer action: ${label}`);
+  assert.doesNotMatch(ui, /Add (?:File|Folder) to Chat|addSelectionToChat|api\.ai\.sendFile/);
   assert.doesNotMatch(ui, /Share<\/span>/);
 });
 
