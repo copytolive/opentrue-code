@@ -53,4 +53,5 @@ const manifest = {
 };
 fs.mkdirSync(dist, { recursive: true });
 fs.writeFileSync(path.join(dist, 'build-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+fs.writeFileSync(path.join(dist, 'SHA256SUMS'), `${artifacts.map((item)=>`${item.sha256}  ${item.file}`).join('\n')}\n`);
 console.log(`RWACODE_BUILD_MANIFEST=PASS version=${pkg.version} sha=${gitSha} artifacts=${artifacts.length}`);
