@@ -7,7 +7,7 @@
   const right = document.getElementById('rightPanel');
   const fileActions = document.getElementById('fileActions');
   const fileTree = document.getElementById('fileTree');
-  const address = document.getElementById('addressInput');
+  const fileMoreButton = document.getElementById('fileMoreButton');
   const previewSurface = document.getElementById('previewSurface');
   const previewContent = document.getElementById('previewContent');
   const inspectorContent = document.getElementById('inspectorContent');
@@ -18,6 +18,7 @@
   const syncStatusPreviewMeta = document.getElementById('syncStatusPreviewMeta');
   const inspectorPreviewState = document.getElementById('inspectorPreviewState');
   const workspaceChip = document.getElementById('workspaceChip');
+  let rightMode = 'preview';
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -33,12 +34,17 @@
     try { localStorage.setItem(`rwacode:${side}-width`, String(Math.round(value))); } catch {}
   }
 
+  function applyWidth(side, value) {
+    const variable = side === 'files' ? '--files-w' : '--right-w';
+    root.style.setProperty(variable, `${Math.round(value)}px`, 'important');
+  }
+
   function restoreWidths() {
     try {
       const filesWidth = Number.parseFloat(localStorage.getItem('rwacode:files-width'));
       const rightWidth = Number.parseFloat(localStorage.getItem('rwacode:right-width'));
-      if (Number.isFinite(filesWidth)) root.style.setProperty('--files-w', `${Math.round(clamp(filesWidth, 250, 500))}px`);
-      if (Number.isFinite(rightWidth)) root.style.setProperty('--right-w', `${Math.round(clamp(rightWidth, 300, 620))}px`);
+      if (Number.isFinite(filesWidth)) applyWidth('files', clamp(filesWidth, 250, 500));
+      if (Number.isFinite(rightWidth)) applyWidth('right', clamp(rightWidth, 300, 620));
     } catch {}
   }
 
@@ -48,17 +54,18 @@
     handle.className = 'shell-resize-handle';
     handle.setAttribute('role', 'separator');
     handle.setAttribute('aria-orientation', 'vertical');
+    handle.setAttribute('aria-label', side === 'files' ? 'Resize Explorer' : 'Resize Preview');
     handle.tabIndex = 0;
     host.appendChild(handle);
 
     const variable = side === 'files' ? '--files-w' : '--right-w';
     const min = side === 'files' ? 250 : 300;
     const max = side === 'files' ? 500 : 620;
-    const fallback = side === 'files' ? 370 : 416;
+    const fallback = side === 'files' ? 328 : 392;
 
     function setWidth(next) {
       const value = Math.round(clamp(next, min, max));
-      root.style.setProperty(variable, `${value}px`);
+      applyWidth(side, value);
       persistWidth(side, value);
       window.dispatchEvent(new Event('resize'));
     }
@@ -100,17 +107,27 @@
   installResizer(files, 'files');
   installResizer(right, 'right');
 
-  /* VS Code-like Explorer menu follows the pointer, but all operations still use the root-locked IPC. */
+  function placeMenuAt(x, y) {
+    if (!fileActions) return;
+    requestAnimationFrame(() => {
+      const width = 250;
+      const height = Math.min(430, fileActions.scrollHeight || 330);
+      fileActions.style.left = `${clamp(x, 8, window.innerWidth - width - 8)}px`;
+      fileActions.style.top = `${clamp(y, 66, window.innerHeight - height - 12)}px`;
+    });
+  }
+
   if (fileTree && fileActions) {
     fileTree.addEventListener('contextmenu', (event) => {
       const row = event.target.closest('.file-row');
       if (!row) return;
-      requestAnimationFrame(() => {
-        const width = 250;
-        const height = Math.min(330, fileActions.scrollHeight || 300);
-        fileActions.style.left = `${clamp(event.clientX, 8, window.innerWidth - width - 8)}px`;
-        fileActions.style.top = `${clamp(event.clientY, 66, window.innerHeight - height - 12)}px`;
-      });
+      placeMenuAt(event.clientX, event.clientY);
+    });
+    fileTree.addEventListener('click', (event) => {
+      const more = event.target.closest('.file-row-more');
+      if (!more) return;
+      const rect = more.getBoundingClientRect();
+      placeMenuAt(rect.right + 4, rect.top);
     });
     document.addEventListener('pointerdown', (event) => {
       if (fileActions.classList.contains('hidden')) return;
@@ -119,97 +136,46 @@
     });
   }
 
-  function providerFromUrl(value) {
-    try {
-      const host = new URL(String(value || '')).hostname.toLowerCase();
-      if (host === 'chatgpt.com' || host.endsWith('.chatgpt.com') || host === 'chat.openai.com') return 'ChatGPT';
-      if (host === 'claude.ai' || host.endsWith('.claude.ai')) return 'Claude';
-      if (host === 'gemini.google.com') return 'Gemini';
-    } catch {}
-    return null;
+  if (fileMoreButton && fileActions) {
+    fileMoreButton.addEventListener('click', () => {
+      const rect = fileMoreButton.getBoundingClientRect();
+      placeMenuAt(rect.right - 250, rect.bottom + 6);
+    });
   }
 
-  async function routeToAiProvider() {
-    const currentProvider = providerFromUrl(address?.value);
-    if (currentProvider) {
-      await api.browser.setVisible(true);
-      return currentProvider;
-    }
-
-    const s = typeof state !== 'undefined' ? state : null;
-    const existing = [...(s?.tabs || [])].reverse().find((tab) => providerFromUrl(tab.url));
-    if (existing) {
-      await api.browser.switchTab(existing.id);
-      await api.browser.setVisible(true);
-      return providerFromUrl(existing.url);
-    }
-
-    await api.browser.newTab('https://chatgpt.com/');
-    await api.browser.setVisible(true);
-    return 'ChatGPT';
-  }
-
-  /* Screenshot target flow: no modal between Explorer and the real AI composer. */
-  async function directSendSelectedFile() {
-    const s = typeof state !== 'undefined' ? state : null;
-    const selectedRow = document.querySelector('.file-row.selected');
-    const target = s?.editorPath || s?.selectedPath || selectedRow?.dataset.path || null;
-    if (!target) {
-      if (typeof status === 'function') status('Select a local file first');
+  function setPreviewNativeVisible(visible) {
+    if (!visible || document.body.classList.contains('right-collapsed')) {
+      api.preview.setBounds({ x:0, y:0, width:1, height:1 }).catch(() => {});
       return;
     }
-
-    try {
-      await api.files.read(target); // validates that the selection is a root-locked text file, not a folder.
-      if (s?.editorPath === target && s?.editorDirty && typeof saveEditor === 'function') await saveEditor();
-      if (s?.editorPath && typeof closeEditor === 'function') await closeEditor(false);
-      if (s?.proposalPath && typeof cancelProposal === 'function') await cancelProposal();
-
-      const provider = await routeToAiProvider();
-      if (typeof status === 'function') status(`Adding ${target} to ${provider}…`);
-      const instruction = 'Review this selected local file in the context of the current conversation. Explain it clearly. If I ask for a change, return the complete replacement file in exactly one fenced code block.';
-      const result = await api.ai.sendFile(target, instruction);
-      fileActions?.classList.add('hidden');
-      const signal = document.getElementById('signalAiBridge');
-      if (signal) signal.textContent = 'COMPOSER';
-      if (typeof status === 'function') status(`${result.provider}: local file added directly to the composer`);
-    } catch (error) {
-      if (typeof status === 'function') status(`Add to Chat: ${error.message}`);
-    }
+    requestAnimationFrame(() => {
+      const rect = previewSurface?.getBoundingClientRect();
+      if (!rect || rect.width < 2 || rect.height < 2) return;
+      api.preview.setBounds({ x:rect.x, y:rect.y, width:rect.width, height:rect.height }).catch(() => {});
+    });
   }
 
-  const aiAction = document.querySelector('#fileActions [data-action="ai-send"]');
-  if (aiAction) {
-    aiAction.textContent = 'Add selected file to Chat';
-    aiAction.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      directSendSelectedFile();
-    }, true);
-  }
-
-  const patchEditorAiButton = () => {
-    const editorSend = document.getElementById('editorSendAiButton');
-    if (!editorSend || editorSend.dataset.directWired === 'true') return;
-    editorSend.dataset.directWired = 'true';
-    editorSend.textContent = 'Add to Chat';
-    editorSend.title = 'Add this local file directly to the active ChatGPT, Claude, or Gemini composer.';
-    editorSend.onclick = directSendSelectedFile;
-  };
-  patchEditorAiButton();
-  requestAnimationFrame(patchEditorAiButton);
-
-  /* Preview and Inspector use the same right rail rather than creating another permanent panel. */
   function selectRightTab(name) {
-    const preview = name === 'preview';
+    rightMode = name === 'inspector' ? 'inspector' : 'preview';
+    const preview = rightMode === 'preview';
     previewTabButton?.classList.toggle('active', preview);
     inspectorTabButton?.classList.toggle('active', !preview);
+    previewTabButton?.setAttribute('aria-selected', String(preview));
+    inspectorTabButton?.setAttribute('aria-selected', String(!preview));
     previewContent?.classList.toggle('hidden', !preview);
     inspectorContent?.classList.toggle('hidden', preview);
+    setPreviewNativeVisible(preview);
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
-  if (previewTabButton) previewTabButton.onclick = () => selectRightTab('preview');
-  if (inspectorTabButton) inspectorTabButton.onclick = () => selectRightTab('inspector');
+
+  if (previewTabButton) {
+    previewTabButton.setAttribute('role', 'tab');
+    previewTabButton.onclick = () => selectRightTab('preview');
+  }
+  if (inspectorTabButton) {
+    inspectorTabButton.setAttribute('role', 'tab');
+    inspectorTabButton.onclick = () => selectRightTab('inspector');
+  }
 
   function syncVisibleStatus() {
     const fileState = document.getElementById('signalFileSync')?.textContent?.trim() || 'LIVE';
@@ -219,28 +185,20 @@
     if (syncStatusPreviewMeta) syncStatusPreviewMeta.textContent = previewState === 'LIVE' ? 'Local project is rendering' : previewState === 'ERROR' ? 'Preview could not be loaded' : previewState === 'LOADING' ? 'Connecting to local project' : 'No active preview';
     if (inspectorPreviewState) inspectorPreviewState.textContent = previewState.charAt(0) + previewState.slice(1).toLowerCase();
   }
+
   for (const id of ['signalFileSync', 'signalPreview']) {
     const node = document.getElementById(id);
-    if (node) new MutationObserver(syncVisibleStatus).observe(node, { childList: true, characterData: true, subtree: true });
+    if (node) new MutationObserver(syncVisibleStatus).observe(node, { childList:true, characterData:true, subtree:true });
   }
   syncVisibleStatus();
 
-  /* A failed or idle preview must never leave a white WebContentsView covering the dark placeholder. */
   api.preview.onState((preview) => {
     const next = preview.state || (preview.loading ? 'LOADING' : 'IDLE');
-    if (next === 'IDLE' || next === 'ERROR') {
-      api.preview.setBounds({ x: 0, y: 0, width: 1, height: 1 }).catch(() => {});
-    } else if (next === 'LIVE' || next === 'LOADING') {
-      requestAnimationFrame(() => {
-        if (!previewSurface || document.body.classList.contains('right-collapsed')) return;
-        const rect = previewSurface.getBoundingClientRect();
-        if (rect.width > 2 && rect.height > 2) api.preview.setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }).catch(() => {});
-      });
-    }
+    if (next === 'IDLE' || next === 'ERROR' || rightMode !== 'preview') setPreviewNativeVisible(false);
+    else if (next === 'LIVE' || next === 'LOADING') setPreviewNativeVisible(true);
     syncVisibleStatus();
   });
 
-  /* Keep the screenshot's compact workspace-chip text even when renderer refreshes the root. */
   if (workspaceChip) {
     const normalizeWorkspaceChip = () => {
       const current = workspaceChip.textContent || '';
@@ -249,10 +207,9 @@
       if (workspaceChip.textContent !== desired) workspaceChip.textContent = desired;
     };
     normalizeWorkspaceChip();
-    new MutationObserver(normalizeWorkspaceChip).observe(workspaceChip, { childList: true, characterData: true, subtree: true });
+    new MutationObserver(normalizeWorkspaceChip).observe(workspaceChip, { childList:true, characterData:true, subtree:true });
   }
 
-  /* Internal profile plumbing remains available but is no longer user-facing. */
   document.querySelector('.profile-wrap')?.setAttribute('aria-hidden', 'true');
   document.querySelector('.signals-panel')?.setAttribute('aria-hidden', 'true');
 

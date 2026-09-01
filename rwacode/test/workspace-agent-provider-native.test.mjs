@@ -61,9 +61,10 @@ test('Google Drive write-back is an explicit shell-owned Sync to Drive action', 
   assert.doesNotMatch(agentUi, /setTimeout\([^\n]*driveAction|setInterval\([^\n]*driveAction/);
 });
 
-test('Undo remains visible when the center pane is too narrow for one command row', () => {
+test('Undo remains visible when the center pane is narrow and responsive handlers stay shell-only', () => {
   assert.match(agentResponsiveFix, /\.rw-agent-row\{flex-wrap:wrap!important/);
   assert.match(agentResponsiveFix, /#agentUndoButton\{visibility:visible!important;display:inline-flex!important/);
   assert.match(agentResponsiveFix, /\.rw-agent-input\{flex:1 1 220px;min-width:180px\}/);
-  assert.doesNotMatch(agentResponsiveFix, /querySelector|addEventListener|MutationObserver|preventDefault/);
+  assert.match(agentResponsiveFix, /previewFullscreenButton/);
+  assert.doesNotMatch(agentResponsiveFix, /prompt-textarea|send-button|contenteditable|chatgpt\.com|claude\.ai|gemini\.google\.com|chat\.deepseek\.com|executeJavaScript/);
 });

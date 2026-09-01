@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
 const workspace = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
+const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
 const executableSource = source.replace(/^\s*\/\/.*$/gm, '');
 
 test('Electron prompt replacement remains available for file naming and destructive confirmations', () => {
@@ -15,13 +16,12 @@ test('Electron prompt replacement remains available for file naming and destruct
   assert.doesNotMatch(executableSource, /window\.confirm\(/);
 });
 
-test('primary selected-file AI action bypasses the Send-to-AI modal and routes straight to the composer', () => {
-  assert.match(workspace, /async function directSendSelectedFile\(/);
-  assert.match(workspace, /const provider = await routeToAiProvider\(\)/);
-  assert.match(workspace, /await api\.ai\.sendFile\(target, instruction\)/);
-  assert.match(workspace, /stopImmediatePropagation\(\)/);
-  assert.match(workspace, /editorSend\.onclick = directSendSelectedFile/);
-  assert.doesNotMatch(workspace, /await uiPrompt\(/);
+test('native provider browser has no selected-file composer routing in the visible workspace shell', () => {
+  assert.doesNotMatch(workspace, /directSendSelectedFile|routeToAiProvider|api\.ai\.sendFile|api\.ai\.readReply/);
+  assert.match(responsive, /removeProviderDomActions/);
+  assert.match(responsive, /editorSendAiButton/);
+  assert.match(responsive, /editorImportAiButton/);
+  assert.match(responsive, /node\.remove\(\)/);
 });
 
 test('file and profile text-entry actions still use the in-app dialog fallback', () => {
