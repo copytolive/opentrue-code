@@ -120,8 +120,8 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env } 
     const gemini = findExecutable('gemini', env);
     return {
       localLiteral: { available:true, mode:'deterministic-safe-replacement' },
-      claude: { available:Boolean(claude), executable:claude || null, mode:'plan' },
-      gemini: { available:Boolean(gemini), executable:gemini || null, mode:'plan' },
+      claude: { available:Boolean(claude), executable:claude || null, mode:'plan-read-glob-grep-only' },
+      gemini: { available:Boolean(gemini), executable:gemini || null, mode:'sandbox-plan' },
       codex: { available:false, executable:findExecutable('codex', env) || null, mode:'disabled-until-read-only-sandbox-is-reliably-enforced' },
     };
   }
@@ -139,13 +139,13 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env } 
     if (available.claude.available) {
       try {
         const schema = JSON.stringify({ type:'object', required:['version','summary','operations'], properties:{ version:{const:1}, summary:{type:'string'}, operations:{type:'array'} } });
-        const result = await runProcess(available.claude.executable, ['-p', prompt, '--output-format','json','--json-schema',schema,'--permission-mode','plan','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root });
+        const result = await runProcess(available.claude.executable, ['-p', prompt, '--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root });
         return { runner:'claude', changeSet:parseClaudeOutput(result.stdout) };
       } catch (error) { failures.push(`Claude: ${error.message}`); }
     }
     if (available.gemini.available) {
       try {
-        const result = await runProcess(available.gemini.executable, ['--approval-mode','plan','--output-format','json','--prompt',prompt], { cwd:root });
+        const result = await runProcess(available.gemini.executable, ['--sandbox','--approval-mode','plan','--output-format','json','--prompt',prompt], { cwd:root });
         return { runner:'gemini', changeSet:parseGeminiOutput(result.stdout) };
       } catch (error) { failures.push(`Gemini: ${error.message}`); }
     }
