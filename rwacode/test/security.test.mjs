@@ -12,10 +12,7 @@ const { isSensitivePath, redactSensitiveText }=require('../electron/project-cont
 
 test('path guard allows files inside root and rejects read/write escape attempts',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'rwacode-root-'));const outside=fs.mkdtempSync(path.join(os.tmpdir(),'rwacode-outside-'));
-  try{
-    fs.writeFileSync(path.join(root,'inside.txt'),'ok');fs.writeFileSync(path.join(outside,'outside.txt'),'no');fs.symlinkSync(outside,path.join(root,'escape-link'));fs.symlinkSync(path.join(outside,'outside.txt'),path.join(root,'write-escape.txt'));const guard=createPathGuard(root);
-    assert.equal(guard.resolveExisting('inside.txt'),fs.realpathSync.native(path.join(root,'inside.txt')));assert.throws(()=>guard.resolveExisting('../outside.txt'));assert.throws(()=>guard.resolveExisting('escape-link/outside.txt'));assert.throws(()=>guard.resolveExisting('/etc/passwd'));assert.throws(()=>guard.resolveWritable('../new.txt'));assert.throws(()=>guard.resolveWritable('write-escape.txt'));assert.equal(guard.resolveWritable('new-inside.txt'),path.join(fs.realpathSync.native(root),'new-inside.txt'));
-  }finally{fs.rmSync(root,{recursive:true,force:true});fs.rmSync(outside,{recursive:true,force:true});}
+  try{fs.writeFileSync(path.join(root,'inside.txt'),'ok');fs.writeFileSync(path.join(outside,'outside.txt'),'no');fs.symlinkSync(outside,path.join(root,'escape-link'));fs.symlinkSync(path.join(outside,'outside.txt'),path.join(root,'write-escape.txt'));const guard=createPathGuard(root);assert.equal(guard.resolveExisting('inside.txt'),fs.realpathSync.native(path.join(root,'inside.txt')));assert.throws(()=>guard.resolveExisting('../outside.txt'));assert.throws(()=>guard.resolveExisting('escape-link/outside.txt'));assert.throws(()=>guard.resolveExisting('/etc/passwd'));assert.throws(()=>guard.resolveWritable('../new.txt'));assert.throws(()=>guard.resolveWritable('write-escape.txt'));assert.equal(guard.resolveWritable('new-inside.txt'),path.join(fs.realpathSync.native(root),'new-inside.txt'));}finally{fs.rmSync(root,{recursive:true,force:true});fs.rmSync(outside,{recursive:true,force:true});}
 });
 
 test('external browser webContents stay sandboxed Node-free and have no localhost server',()=>{
@@ -23,18 +20,15 @@ test('external browser webContents stay sandboxed Node-free and have no localhos
 });
 
 test('official provider automation is restricted to exact HTTPS API hosts',()=>{
-  assert.equal(assertOfficialEndpoint('chatgpt','https://api.openai.com/v1/responses'),'https://api.openai.com/v1/responses');assert.equal(assertOfficialEndpoint('claude','https://api.anthropic.com/v1/messages'),'https://api.anthropic.com/v1/messages');assert.throws(()=>assertOfficialEndpoint('chatgpt','https://chatgpt.com/'),/official host/);assert.throws(()=>assertOfficialEndpoint('claude','https://example.com/'),/official host/);
-  const none=availability({});for(const id of ['chatgpt','claude','gemini','deepseek'])assert.equal(none[id].available,false);
+  assert.equal(assertOfficialEndpoint('chatgpt','https://api.openai.com/v1/responses'),'https://api.openai.com/v1/responses');assert.equal(assertOfficialEndpoint('claude','https://api.anthropic.com/v1/messages'),'https://api.anthropic.com/v1/messages');assert.throws(()=>assertOfficialEndpoint('chatgpt','https://chatgpt.com/'),/official host/);assert.throws(()=>assertOfficialEndpoint('claude','https://example.com/'),/official host/);const none=availability({});for(const id of ['chatgpt','claude','gemini','deepseek'])assert.equal(none[id].available,false);
 });
 
 test('secret-bearing paths and likely inline credentials are excluded or redacted before provider context',()=>{
-  for(const value of ['.env','.env.production','.ssh/id_rsa','.aws/credentials','secret/private.pem'])assert.equal(isSensitivePath(value),true,value);
-  const text=redactSensitiveText('OPENAI_API_KEY=sk-secret-value\npassword: hunter2\nghp_abcdefghijklmnopqrstuvwxyz123456');assert.doesNotMatch(text,/sk-secret-value|hunter2|ghp_abcdefghijklmnopqrstuvwxyz123456/);assert.match(text,/REDACTED/);
+  for(const value of ['.env','.env.production','.ssh/id_rsa','.aws/credentials','secret/private.pem'])assert.equal(isSensitivePath(value),true,value);const text=redactSensitiveText('SERVICE_TOKEN=synthetic-redaction-target\nauthorization: Bearer synthetic-bearer-target');assert.doesNotMatch(text,/synthetic-redaction-target|synthetic-bearer-target/);assert.match(text,/REDACTED/);
 });
 
 test('native provider bridge implementation is physically absent',()=>{
-  const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
-  for(const source of [main,preload])assert.doesNotMatch(source,/createAiBridge|ai:sendFile|ai:readReply|executeJavaScript|prompt-textarea|send-button/);assert.doesNotMatch(pkg.scripts.check,/ai-bridge\.cjs|chat-first-ui\.js/);
+  const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));for(const source of [main,preload])assert.doesNotMatch(source,/createAiBridge|ai:sendFile|ai:readReply|executeJavaScript|prompt-textarea|send-button/);assert.doesNotMatch(pkg.scripts.check,/ai-bridge\.cjs|chat-first-ui\.js/);
 });
 
 test('preload exposes only explicit allowlisted IPC methods',()=>{
