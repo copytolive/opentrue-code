@@ -37,11 +37,13 @@ test('request IDs are deliberately boring and bounded', () => {
 });
 
 test('deploy configuration requires explicit opt-in, exact web root and local identity path', () => {
+  const server = 'deployer@example.invalid';
   assert.throws(() => bridge.validateDeployConfig({ deploy:{ enabled:false } }), /disabled/);
-  assert.throws(() => bridge.validateDeployConfig({ deploy:{ enabled:true, server:'root@109.123.239.76', remote_root:'/var/www/other', identity_file:'/tmp/key' } }), /remote_root/);
-  assert.throws(() => bridge.validateDeployConfig({ deploy:{ enabled:true, server:'root@109.123.239.76', remote_root:'/var/www/copytolive', identity_file:'relative-key' } }), /absolute local path/);
-  const value = bridge.validateDeployConfig({ deploy:{ enabled:true, server:'root@109.123.239.76', remote_root:'/var/www/copytolive', identity_file:'/Users/antigravity1/.ssh/id_ed25519', public_urls:['https://copytolive.com/'] } });
-  assert.equal(value.server, 'root@109.123.239.76');
+  assert.throws(() => bridge.validateDeployConfig({ deploy:{ enabled:true, server, remote_root:'/var/www/other', identity_file:'/tmp/test-identity' } }), /remote_root/);
+  assert.throws(() => bridge.validateDeployConfig({ deploy:{ enabled:true, server, remote_root:'/var/www/copytolive', identity_file:'relative-key' } }), /absolute local path/);
+  const value = bridge.validateDeployConfig({ deploy:{ enabled:true, server, remote_root:'/var/www/copytolive', identity_file:'/tmp/test-identity', public_urls:['https://copytolive.com/'] } });
+  assert.equal(value.server, server);
+  assert.equal(value.identityFile, '/tmp/test-identity');
   assert.equal(value.remoteRoot, '/var/www/copytolive');
 });
 
