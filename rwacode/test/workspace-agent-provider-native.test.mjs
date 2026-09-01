@@ -18,25 +18,25 @@ test('Workspace Agent never installs provider-wide click keydown or DOM intercep
 test('Command Bar Enter handling is scoped to the RWACode-owned input only',()=>{
   assert.match(agentUi,/agentTaskInput/);
   assert.match(agentUi,/el\('agentTaskInput'\)\.addEventListener\('keydown'/);
-  assert.match(agentUi,/event\.preventDefault\(\);\s*runTask\(\)/);
-  assert.doesNotMatch(agentUi,/document\.addEventListener\(['"]keydown['"]/);
+  assert.match(agentUi,/event\.preventDefault\(\);runTask\(\)/);
   assert.doesNotMatch(agentUi,/querySelectorAll\([^\n]*(?:prompt-textarea|contenteditable|send-button)/i);
 });
 
-test('agent bridge is narrow IPC with no localhost server or generic shell endpoint',()=>{
-  for(const channel of ['agent:getStatus','agent:plan','agent:apply','agent:undo','agent:githubAction','agent:driveAction']) assert.match(agentIpc,new RegExp(channel));
+test('agent bridge is narrow IPC with explicit manual ChangeSet review and no shell server',()=>{
+  for(const channel of ['agent:getStatus','agent:plan','agent:prepareChangeSet','agent:apply','agent:undo','agent:githubAction','agent:driveAction']) assert.match(agentIpc,new RegExp(channel));
   assert.doesNotMatch(agentIpc,/http\.createServer|express\(|fastify\(|listen\(|child_process|exec\(|spawn\(/);
-  assert.match(preload,/agent:\s*\{/);
+  assert.match(preload,/prepareChangeSet/);
   assert.match(preload,/githubAction/);
   assert.match(preload,/driveAction/);
   assert.doesNotMatch(preload,/child_process|exec\(|spawn\(|require\(['"]fs['"]\)/);
 });
 
-test('Workspace Agent loads Local GitHub Google Drive and explicit provider selection',()=>{
+test('Workspace Agent loads Local GitHub Google Drive and manual handoff without provider API selector',()=>{
   assert.match(html,/<script src="\.\/agent-ui\.js"><\/script>/);
   assert.match(html,/<script src="\.\/agent-responsive-fix\.js"><\/script>/);
-  for(const id of ['agentCommandBar','agentWorkspaceTag','agentProvider','agentTaskInput','agentRunButton','agentUndoButton','agentApplyButton','agentDiff','agentDriveSyncButton']) assert.match(agentUi,new RegExp(id));
-  for(const token of ['@Local','@GitHub','@GoogleDrive','ChatGPT API','Claude API','Gemini API','DeepSeek API']) assert.match(agentUi,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const id of ['agentCommandBar','agentWorkspaceTag','agentTaskInput','agentRunButton','agentManualToggleButton','agentManualInput','agentReviewChangeSetButton','agentUndoButton','agentApplyButton','agentDiff','agentDriveSyncButton']) assert.match(agentUi,new RegExp(id));
+  for(const token of ['@Local','@GitHub','@GoogleDrive','Paste ChangeSet','Review ChangeSet','NO_AI_API']) assert.match(agentUi,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(agentUi,/agentProvider|ChatGPT API|Claude API|Gemini API|DeepSeek API|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|DEEPSEEK_API_KEY/);
 });
 
 test('GitHub commit push and PR remain explicit shell-owned actions',()=>{
@@ -65,5 +65,5 @@ test('Undo is source-bound and stale prepared changes are rejected after target 
 test('responsive shell keeps Undo visible and never touches provider DOM',()=>{
   assert.match(agentResponsiveFix,/#agentUndoButton\{visibility:visible!important;display:inline-flex!important/);
   assert.match(agentResponsiveFix,/previewFullscreenButton/);
-  assert.doesNotMatch(agentResponsiveFix,/prompt-textarea|send-button|contenteditable|chatgpt\.com|claude\.ai|gemini\.google\.com|chat\.deepseek\.com|executeJavaScript/);
+  assert.doesNotMatch(agentResponsiveFix,/agentProvider|prompt-textarea|send-button|contenteditable|chatgpt\.com|claude\.ai|gemini\.google\.com|chat\.deepseek\.com|executeJavaScript/);
 });
