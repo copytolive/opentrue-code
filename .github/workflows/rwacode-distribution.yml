@@ -26,6 +26,8 @@ jobs:
       APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Require Apple distribution credentials
@@ -33,13 +35,22 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_TEAM_ID; do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::Missing required GitHub Actions secret backing $name"
               missing=1
             fi
           done
           test "$missing" -eq 0
+
+          if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; then
+            echo "APPLE_NOTARIZATION_AUTH=APPLE_ID"
+          elif [[ -n "${APPLE_API_KEY_P8_BASE64:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
+            echo "APPLE_NOTARIZATION_AUTH=API_KEY"
+          else
+            echo "::error::Configure either APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD or the App Store Connect API key trio"
+            exit 1
+          fi
           echo "APPLE_DISTRIBUTION_CREDENTIAL_GATE=PASS"
 
       - name: Checkout exact requested commit
@@ -70,10 +81,15 @@ jobs:
         working-directory: rwacode
         run: npm ci --no-audit --no-fund
 
-      - name: Materialize App Store Connect API key
+      - name: Prepare notarization authentication
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; then
+            echo "APPLE_NOTARIZATION_AUTH=APPLE_ID"
+            exit 0
+          fi
+
           KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
           export KEY_PATH
           python3 - <<'PY'
@@ -84,6 +100,7 @@ jobs:
           path.chmod(0o600)
           PY
           echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "APPLE_NOTARIZATION_AUTH=API_KEY"
           echo "APPLE_NOTARIZATION_KEY_MATERIALIZED=PASS"
 
       - name: Build, sign, notarize, staple, Gatekeeper-check, and smoke-test
