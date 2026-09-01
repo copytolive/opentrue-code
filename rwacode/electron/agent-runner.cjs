@@ -5,7 +5,11 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 
-const ALLOWLIST = ['claude','gemini'];
+// Only runners whose current non-interactive mode can be constrained to a
+// read-only planning surface are active. Other official CLIs are still detected
+// and reported so RWACode never assumes availability or silently falls back to
+// provider DOM automation.
+const ALLOWLIST = ['claude'];
 const MAX_RUNNER_OUTPUT_BYTES = 2 * 1024 * 1024;
 const RUNNER_TIMEOUT_MS = 120000;
 
@@ -108,21 +112,18 @@ function parseClaudeOutput(stdout) {
   const body = parsed.structured_output || parsed.result || parsed.response;
   return typeof body === 'string' ? extractJsonObject(body) : body;
 }
-function parseGeminiOutput(stdout) {
-  const parsed = JSON.parse(stdout);
-  return extractJsonObject(parsed.response || parsed.result || '');
-}
 
 function createAgentRunner({ root, projectContext, adapter, env = process.env } = {}) {
   if (!root || !projectContext || !adapter) throw new Error('AgentRunner requires root, projectContext, and adapter');
   function availability() {
     const claude = findExecutable('claude', env);
     const gemini = findExecutable('gemini', env);
+    const codex = findExecutable('codex', env);
     return {
       localLiteral: { available:true, mode:'deterministic-safe-replacement' },
       claude: { available:Boolean(claude), executable:claude || null, mode:'plan-read-glob-grep-only' },
-      gemini: { available:Boolean(gemini), executable:gemini || null, mode:'sandbox-plan' },
-      codex: { available:false, executable:findExecutable('codex', env) || null, mode:'disabled-until-read-only-sandbox-is-reliably-enforced' },
+      gemini: { available:false, detected:Boolean(gemini), executable:gemini || null, mode:'disabled-headless-plan-can-auto-transition-to-yolo' },
+      codex: { available:false, detected:Boolean(codex), executable:codex || null, mode:'disabled-until-read-only-sandbox-is-reliably-enforced' },
     };
   }
 
@@ -143,14 +144,15 @@ function createAgentRunner({ root, projectContext, adapter, env = process.env } 
         return { runner:'claude', changeSet:parseClaudeOutput(result.stdout) };
       } catch (error) { failures.push(`Claude: ${error.message}`); }
     }
-    if (available.gemini.available) {
-      try {
-        const result = await runProcess(available.gemini.executable, ['--sandbox','--approval-mode','plan','--output-format','json','--prompt',prompt], { cwd:root });
-        return { runner:'gemini', changeSet:parseGeminiOutput(result.stdout) };
-      } catch (error) { failures.push(`Gemini: ${error.message}`); }
-    }
-    const detail = failures.length ? failures.join(' | ') : 'No supported official read-only coding CLI is available.';
-    throw new Error(`${detail} Install/sign in to Claude Code or Gemini CLI, or use an unambiguous literal replacement task.`);
+    const disabled = [];
+    if (available.gemini.detected) disabled.push('Gemini CLI detected but disabled because current headless Plan Mode may auto-transition to YOLO execution');
+    if (available.codex.detected) disabled.push('Codex CLI detected but disabled until RWACode can enforce a hard read-only planning sandbox');
+    const detail = failures.length
+      ? failures.join(' | ')
+      : disabled.length
+        ? disabled.join(' | ')
+        : 'No supported official read-only coding CLI is available.';
+    throw new Error(`${detail} Sign in to an allowlisted read-only runner, or use an unambiguous literal replacement task.`);
   }
 
   return { plan, availability, allowlist:[...ALLOWLIST] };
