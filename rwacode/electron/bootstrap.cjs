@@ -26,7 +26,8 @@ function migrateLegacyRwacodeState(){
     copyIfMissing(path.join(legacyRoot,'profiles.json'),path.join(stableUserData,'profiles.json'));
     const legacyPartitions=path.join(legacyRoot,'Partitions');if(!fs.existsSync(legacyPartitions))continue;
     let entries=[];try{entries=fs.readdirSync(legacyPartitions,{withFileTypes:true});}catch{continue;}
-    for(const entry of entries){if(!entry.isDirectory())continue;if(!entry.name.startsWith('rwacode-profile-')&&entry.name!=='rwacode-preview')continue;copyIfMissing(path.join(legacyPartitions,entry.name),path.join(stableUserData,'Partitions',entry.name));}
+    // Preserve only named provider-profile sessions. Legacy Preview/browser state is never imported.
+    for(const entry of entries){if(!entry.isDirectory())continue;if(!entry.name.startsWith('rwacode-profile-'))continue;copyIfMissing(path.join(legacyPartitions,entry.name),path.join(stableUserData,'Partitions',entry.name));}
   }
 }
 migrateLegacyRwacodeState();
