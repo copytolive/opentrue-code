@@ -67,3 +67,21 @@ test('V2.2 polish keeps long workspace paths readable and gives the universal br
   assert.match(css21, /\.preview-surface\{min-height:410px!important\}/);
   assert.doesNotMatch(css21, /ChatGPT|Claude|Gemini|DeepSeek/i);
 });
+
+test('V2.3 context source cards are functional controls over the authoritative workspace selector', () => {
+  assert.match(shell, /function activateContextSource\(type\)/);
+  assert.match(shell, /tag\.value = type/);
+  assert.match(shell, /tag\.dispatchEvent\(new Event\('change', \{ bubbles:true \}\)\)/);
+  assert.match(shell, /row\.setAttribute\('role', 'button'\)/);
+  assert.match(shell, /row\.setAttribute\('tabindex', '0'\)/);
+  assert.match(shell, /row\.addEventListener\('click'/);
+  assert.match(shell, /event\.key === 'Enter' \|\| event\.key === ' '/);
+  assert.match(shell, /syncContextSourceSelection\(\)/);
+  assert.match(agent, /el\('agentWorkspaceTag'\)\.onchange=updateSourceUi/);
+});
+
+test('V2.3 uses native macOS traffic lights without overlapping the RWACode brand', () => {
+  assert.match(shell, /dataset\.platform = \/Macintosh\|Mac OS X\/i/);
+  assert.match(css21, /\[data-platform="darwin"\] \.traffic\{display:none!important\}/);
+  assert.match(css21, /\[data-platform="darwin"\] \.topbar\{padding-left:86px!important\}/);
+});
