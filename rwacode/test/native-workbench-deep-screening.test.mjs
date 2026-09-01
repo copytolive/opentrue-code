@@ -6,6 +6,8 @@ const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf
 const workspace = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
 const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
 const bridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
+const explorerOps = fs.readFileSync(new URL('../electron/explorer-ops.cjs', import.meta.url), 'utf8');
+const acceptance = fs.readFileSync(new URL('../REAL_MAC_UI_ACCEPTANCE.md', import.meta.url), 'utf8');
 const agent = fs.readFileSync(new URL('../src/agent-ui.js', import.meta.url), 'utf8');
 
 function has(id) {
@@ -29,6 +31,15 @@ test('Preview/Inspector controls are functional rather than decorative', () => {
   assert.match(workspace, /rightMode !== 'preview'/);
   assert.match(responsive, /previewFullscreenButton/);
   assert.match(responsive, /event\.key === 'Escape'/);
+});
+
+test('idle/error Preview and Inspector stay collapsed even after later resize events', () => {
+  assert.match(responsive, /function enforcePreviewNativeBounds\(/);
+  assert.match(responsive, /stateText === 'LIVE' \|\| stateText === 'LOADING'/);
+  assert.match(responsive, /previewContent.*classList\.contains\('hidden'\)/s);
+  assert.match(responsive, /api\.preview\.setBounds\(\{ x:0, y:0, width:1, height:1 \}\)/);
+  assert.match(responsive, /window\.addEventListener\('resize'[\s\S]*enforcePreviewNativeBounds/);
+  assert.match(responsive, /api\.preview\.onState\(\(\) => requestAnimationFrame\(enforcePreviewNativeBounds\)\)/);
 });
 
 test('visible Explorer overflow controls receive deterministic menu placement', () => {
@@ -59,4 +70,12 @@ test('misleading click affordances and old provider-DOM bridge actions are remov
   assert.match(responsive, /editorSendAiButton/);
   assert.match(responsive, /editorImportAiButton/);
   assert.match(responsive, /node\.remove\(\)/);
+  assert.doesNotMatch(explorerOps, /Add (?:File|Folder) to Chat|choose\('add-chat'\)/);
+});
+
+test('real-Mac acceptance contract cannot re-authorize provider DOM automation', () => {
+  assert.match(acceptance, /Provider pages are \*\*MANUAL_ONLY\*\*/);
+  assert.match(acceptance, /Workspace Agent Command Bar/);
+  assert.doesNotMatch(acceptance, /inserts bounded local context directly into the active .* composer/i);
+  assert.match(acceptance, /REAL_MAC_FINAL=PASS/);
 });
