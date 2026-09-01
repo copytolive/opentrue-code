@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feat/rwacode-browser-workspace-20260831
     paths:
       - 'rwacode/**'
       - '.github/workflows/rwacode-desktop.yml'
@@ -18,9 +17,9 @@ permissions:
   contents: read
 
 jobs:
-  test-and-build-macos-x64:
+  test-and-build-macos:
     runs-on: macos-15-intel
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
@@ -28,25 +27,34 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Install dependencies
+          cache: npm
+          cache-dependency-path: rwacode/package-lock.json
+      - name: Verify committed lockfile
+        run: test -f rwacode/package-lock.json
+      - name: Install dependencies reproducibly
         working-directory: rwacode
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Unit and security tests
         working-directory: rwacode
         run: npm test
       - name: Syntax checks
         working-directory: rwacode
         run: npm run check
-      - name: Build unsigned macOS x64 DMG and ZIP
+      - name: Build unsigned macOS Intel and Apple Silicon DMG and ZIP
         working-directory: rwacode
         run: npm run build:mac
-      - name: List artifacts
+      - name: Verify both architectures are present
         working-directory: rwacode
-        run: find dist -maxdepth 2 -type f -print
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -maxdepth 2 -type f -print
+          find dist -maxdepth 1 -type f \( -name '*x64*.dmg' -o -name '*x64*.zip' \) -print -quit | grep -q .
+          find dist -maxdepth 1 -type f \( -name '*arm64*.dmg' -o -name '*arm64*.zip' \) -print -quit | grep -q .
       - name: Upload RWACode macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: rwacode-macos-x64-${{ github.run_id }}
+          name: rwacode-macos-x64-arm64-${{ github.run_id }}
           path: |
             rwacode/dist/*.dmg
             rwacode/dist/*.zip
