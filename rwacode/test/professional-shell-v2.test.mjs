@@ -58,3 +58,12 @@ test('professional shell establishes card-based left and right rails without rep
   assert.match(index, /id="browserSurface"/);
   assert.match(index, /id="agentWorkspaceTag"|agent-ui\.js/);
 });
+
+test('V2.2 polish keeps long workspace paths readable and gives the universal browser home a deliberate workbench card', () => {
+  assert.match(css21, /white-space:nowrap!important/);
+  assert.match(css21, /text-overflow:ellipsis!important/);
+  assert.match(css21, /\.browser-chat-home\{[\s\S]*border:1px solid rgba\(44,57,72,.78\)!important/);
+  assert.match(css21, /\.new-tab-page\{[\s\S]*padding:46px 36px!important/);
+  assert.match(css21, /\.preview-surface\{min-height:410px!important\}/);
+  assert.doesNotMatch(css21, /ChatGPT|Claude|Gemini|DeepSeek/i);
+});
