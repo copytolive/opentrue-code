@@ -18,9 +18,9 @@
     .rw-agent-small-input{height:30px;min-width:150px;flex:1;background:#070e16;color:#e7eef7;outline:none;font-size:11px}
     .rw-agent-button.primary{border-color:#3567a0;background:#10213a;color:#edf5ff;font-weight:700}.rw-agent-button:disabled{opacity:.42;cursor:default}
     .rw-agent-meta{display:flex;align-items:center;gap:8px;min-width:0;color:#8393a7;font-size:10px}.rw-agent-meta b{color:#cfd9e5;font-weight:600}.rw-agent-meta .grow{flex:1}
-    .rw-agent-review{display:grid;grid-template-rows:auto minmax(80px,190px);gap:6px}.rw-agent-review.hidden,.rw-agent-git-actions.hidden{display:none!important}
-    .rw-agent-review-head,.rw-agent-git-actions{display:flex;align-items:center;gap:8px;color:#9eacbd;font-size:10px}.rw-agent-review-head strong{color:#e7eef6}
-    .rw-agent-git-actions{padding-top:1px}.rw-agent-git-actions .rw-agent-button{height:30px}
+    .rw-agent-review{display:grid;grid-template-rows:auto minmax(80px,190px);gap:6px}.rw-agent-review.hidden,.rw-agent-git-actions.hidden,.rw-agent-drive-actions.hidden{display:none!important}
+    .rw-agent-review-head,.rw-agent-git-actions,.rw-agent-drive-actions{display:flex;align-items:center;gap:8px;color:#9eacbd;font-size:10px}.rw-agent-review-head strong{color:#e7eef6}
+    .rw-agent-git-actions,.rw-agent-drive-actions{padding-top:1px}.rw-agent-git-actions .rw-agent-button,.rw-agent-drive-actions .rw-agent-button{height:30px}
     .rw-agent-diff{margin:0;max-height:190px;overflow:auto;border:1px solid #28384a;border-radius:8px;background:#060b11;color:#b9c6d5;padding:10px 12px;font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
   `;
   document.head.appendChild(style);
@@ -31,7 +31,7 @@
   host.setAttribute('aria-label', 'RWACode Workspace Agent');
   host.innerHTML = `
     <div class="rw-agent-row">
-      <select id="agentWorkspaceTag" class="rw-agent-source" aria-label="Workspace source"><option value="local">@Local</option><option value="github">@GitHub</option></select>
+      <select id="agentWorkspaceTag" class="rw-agent-source" aria-label="Workspace source"><option value="local">@Local</option><option value="github">@GitHub</option><option value="googledrive">@GoogleDrive</option></select>
       <input id="agentSourceLocator" class="rw-agent-locator hidden" autocomplete="off" spellcheck="false" placeholder="owner/repository#branch" />
       <input id="agentTaskInput" class="rw-agent-input" autocomplete="off" spellcheck="false" placeholder="Describe a change, e.g. ubah VALUE menjadi 22222" />
       <select id="agentMode" class="rw-agent-mode" aria-label="Agent apply mode"><option value="normal">Normal</option><option value="auto">Auto</option></select>
@@ -51,6 +51,11 @@
       <input id="agentPrTitle" class="rw-agent-small-input" autocomplete="off" spellcheck="false" placeholder="Pull request title" />
       <button id="agentPrButton" class="rw-agent-button" disabled>Open PR</button>
     </div>
+    <div id="agentDriveActions" class="rw-agent-drive-actions hidden" aria-label="Explicit Google Drive actions">
+      <strong>Explicit Drive:</strong>
+      <button id="agentDriveSyncButton" class="rw-agent-button primary">Sync to Drive</button>
+      <span id="agentDriveHint">mirror only until Sync to Drive</span>
+    </div>
   `;
   surface.parentNode.insertBefore(host, surface);
 
@@ -61,6 +66,7 @@
   let activeWorkspace = { type:'local' };
   let gitCommitted = false;
   let gitPushed = false;
+  let driveSynced = false;
 
   function shellStatus(message) { const node = document.getElementById('statusMessage'); if (node) node.textContent = message; }
   function resizeViews() { requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); }
@@ -74,22 +80,27 @@
     el('agentCommitButton').disabled = busy || gitCommitted;
     el('agentPushButton').disabled = busy || !gitCommitted || gitPushed;
     el('agentPrButton').disabled = busy || !gitPushed;
+    el('agentDriveSyncButton').disabled = busy || driveSynced || !appliedId;
   }
   function setState(label, message) { el('agentState').textContent = label; el('agentStatus').textContent = message; shellStatus(`Workspace Agent · ${message}`); }
   function selectedSource() {
     const type = el('agentWorkspaceTag').value;
-    if (type === 'github') return { type:'github', locator:el('agentSourceLocator').value.trim() };
+    if (type === 'github' || type === 'googledrive') return { type, locator:el('agentSourceLocator').value.trim() };
     return { type:'local' };
   }
-  function resetGitActions() {
+  function resetSourceActions() {
     gitCommitted = false;
     gitPushed = false;
+    driveSynced = false;
     el('agentGitActions').classList.add('hidden');
+    el('agentDriveActions').classList.add('hidden');
     el('agentCommitButton').disabled = false;
     el('agentPushButton').disabled = true;
     el('agentPrButton').disabled = true;
+    el('agentDriveSyncButton').disabled = true;
     el('agentCommitMessage').value = '';
     el('agentPrTitle').value = '';
+    el('agentDriveHint').textContent = 'mirror only until Sync to Drive';
   }
   function refreshWorkspace(tx = null) {
     if ((tx?.workspace?.type || activeWorkspace.type) === 'local') document.getElementById('fileRefreshButton')?.click();
@@ -108,6 +119,10 @@
       const state = tx.sourceState || {};
       return `root locked · GitHub ${state.repository || tx.workspace?.source?.repository || ''} · ${state.branch || ''}`.trim();
     }
+    if (tx?.workspace?.type === 'googledrive') {
+      const state = tx.sourceState || {};
+      return `root locked · Google Drive mirror · ${state.sourcePath || tx.workspace?.source?.sourcePath || ''}`.trim();
+    }
     return 'root locked · local';
   }
   function showReview(tx) {
@@ -121,31 +136,49 @@
     el('agentApplyButton').disabled = false;
     resizeViews();
   }
-  function showGitDiff(tx) {
-    if (tx?.workspace?.type !== 'github') return hideReview();
-    preparedId = null;
-    el('agentSummary').textContent = `Git diff · ${tx.sourceState?.branch || 'managed branch'}`;
-    el('agentTouched').textContent = `${tx.touched?.length || 0} file(s) · no commit/push performed`;
-    el('agentDiff').textContent = tx.sourceState?.gitDiff || '(clean Git worktree)';
-    el('agentCancelButton').style.display = 'none';
-    el('agentApplyButton').style.display = 'none';
-    el('agentReview').classList.remove('hidden');
-    el('agentScope').textContent = sourceScope(tx);
-    el('agentGitActions').classList.toggle('hidden', tx.status !== 'APPLIED');
-    if (tx.status === 'APPLIED') {
-      gitCommitted = false;
-      gitPushed = false;
-      el('agentCommitButton').disabled = false;
-      el('agentPushButton').disabled = true;
-      el('agentPrButton').disabled = true;
+  function showSourceApplied(tx) {
+    if (tx?.workspace?.type === 'github') {
+      preparedId = null;
+      el('agentSummary').textContent = `Git diff · ${tx.sourceState?.branch || 'managed branch'}`;
+      el('agentTouched').textContent = `${tx.touched?.length || 0} file(s) · no commit/push performed`;
+      el('agentDiff').textContent = tx.sourceState?.gitDiff || '(clean Git worktree)';
+      el('agentCancelButton').style.display = 'none';
+      el('agentApplyButton').style.display = 'none';
+      el('agentReview').classList.remove('hidden');
+      el('agentScope').textContent = sourceScope(tx);
+      el('agentGitActions').classList.toggle('hidden', tx.status !== 'APPLIED');
+      el('agentDriveActions').classList.add('hidden');
+      if (tx.status === 'APPLIED') {
+        gitCommitted = false;
+        gitPushed = false;
+        el('agentCommitButton').disabled = false;
+        el('agentPushButton').disabled = true;
+        el('agentPrButton').disabled = true;
+      }
+      return resizeViews();
     }
-    resizeViews();
+    if (tx?.workspace?.type === 'googledrive') {
+      preparedId = null;
+      el('agentSummary').textContent = `Drive mirror diff · ${tx.sourceState?.sourcePath || 'managed mirror'}`;
+      el('agentTouched').textContent = `${tx.touched?.length || 0} file(s) · ${driveSynced ? 'synced to Drive' : 'not synced to Drive'}`;
+      el('agentDiff').textContent = tx.diff || '(no textual diff)';
+      el('agentCancelButton').style.display = 'none';
+      el('agentApplyButton').style.display = 'none';
+      el('agentReview').classList.remove('hidden');
+      el('agentScope').textContent = sourceScope(tx);
+      el('agentGitActions').classList.add('hidden');
+      el('agentDriveActions').classList.toggle('hidden', tx.status !== 'APPLIED');
+      el('agentDriveSyncButton').disabled = tx.status !== 'APPLIED' || driveSynced;
+      return resizeViews();
+    }
+    hideReview();
   }
   function runnerLabel(status) {
     const names = [];
     if (status?.runners?.localLiteral?.available) names.push('local-safe');
     if (status?.runners?.claude?.available) names.push('Claude Code');
     if (status?.sources?.github?.git?.available) names.push('GitHub worktree');
+    if (status?.sources?.googledrive?.available) names.push('Google Drive Desktop');
     return names.length ? names.join(' · ') : 'no runner';
   }
   async function refreshStatus() {
@@ -165,12 +198,18 @@
     if (busy) return;
     if (!task) return setState('READY', 'Enter a task before Run');
     if (source.type === 'github' && !source.locator) return setState('READY', 'Enter owner/repository for @GitHub');
+    if (source.type === 'googledrive' && !source.locator) return setState('READY', 'Enter a mounted Google Drive file/folder path');
     hideReview();
-    resetGitActions();
+    resetSourceActions();
     el('agentCancelButton').style.display = '';
     el('agentApplyButton').style.display = '';
     setBusy(true);
-    setState('PLANNING', source.type === 'github' ? 'mounting managed GitHub worktree and finding files…' : 'finding relevant project files…');
+    const planning = source.type === 'github'
+      ? 'mounting managed GitHub worktree and finding files…'
+      : source.type === 'googledrive'
+        ? 'materializing Google Drive source into a managed mirror…'
+        : 'finding relevant project files…';
+    setState('PLANNING', planning);
     try {
       const tx = await api.agent.plan(task, { mode:el('agentMode').value, source });
       activeWorkspace = tx.workspace || source;
@@ -178,7 +217,7 @@
         appliedId = tx.id;
         el('agentUndoButton').disabled = false;
         setState('APPLIED', `${tx.runner} · ${tx.touched.length} file(s) changed · Undo available`);
-        if (tx.workspace?.type === 'github') showGitDiff(tx);
+        showSourceApplied(tx);
         refreshWorkspace(tx);
       } else {
         showReview(tx);
@@ -197,8 +236,8 @@
       appliedId = tx.id;
       activeWorkspace = tx.workspace || activeWorkspace;
       el('agentUndoButton').disabled = false;
-      if (tx.workspace?.type === 'github') showGitDiff(tx); else hideReview();
-      setState('APPLIED', `${tx.touched.length} file(s) changed on disk · Undo available`);
+      showSourceApplied(tx);
+      setState('APPLIED', `${tx.touched.length} file(s) changed in managed workspace · Undo available`);
       refreshWorkspace(tx);
     } catch (error) { setState('ERROR', error.message); }
     finally { setBusy(false); await refreshStatus(); }
@@ -206,13 +245,13 @@
   async function undoLast() {
     if (busy) return;
     setBusy(true);
-    setState('UNDO', 'restoring exact BEFORE snapshot…');
+    setState('UNDO', driveSynced ? 'restoring exact BEFORE snapshot in mirror and Google Drive…' : 'restoring exact BEFORE snapshot…');
     try {
       const tx = await api.agent.undo(appliedId || undefined);
       appliedId = null;
       el('agentUndoButton').disabled = true;
-      resetGitActions();
-      if (tx.workspace?.type === 'github') showGitDiff(tx); else hideReview();
+      resetSourceActions();
+      hideReview();
       setState('UNDONE', `${tx.touched.length} file(s) restored to BEFORE state`);
       refreshWorkspace(tx);
     } catch (error) { setState('ERROR', error.message); }
@@ -262,15 +301,39 @@
     } catch (error) { setState('ERROR', error.message); }
     finally { setBusy(false); }
   }
+  async function syncGoogleDrive() {
+    if (!appliedId || driveSynced || busy) return;
+    setBusy(true);
+    setState('SYNCING', 'checking Drive version and syncing explicit transaction…');
+    try {
+      const state = await api.agent.driveAction(appliedId, 'sync', {});
+      driveSynced = true;
+      el('agentDriveSyncButton').disabled = true;
+      el('agentDriveHint').textContent = 'synced · Undo restores Drive BEFORE if unchanged externally';
+      el('agentTouched').textContent = `${state.touched?.length || 0} file(s) · synced to Drive`;
+      setState('SYNCED', 'Google Drive sync complete; Undo remains available');
+    } catch (error) { setState('ERROR', error.message); }
+    finally { setBusy(false); }
+  }
 
   el('agentWorkspaceTag').onchange = () => {
-    const github = el('agentWorkspaceTag').value === 'github';
-    el('agentSourceLocator').classList.toggle('hidden', !github);
-    activeWorkspace = github ? { type:'github' } : { type:'local' };
+    const type = el('agentWorkspaceTag').value;
+    const remote = type === 'github' || type === 'googledrive';
+    el('agentSourceLocator').classList.toggle('hidden', !remote);
+    el('agentSourceLocator').placeholder = type === 'github' ? 'owner/repository#branch' : type === 'googledrive' ? 'Drive file/folder path' : '';
+    activeWorkspace = type === 'github' ? { type:'github' } : type === 'googledrive' ? { type:'googledrive' } : { type:'local' };
     hideReview();
-    resetGitActions();
-    setState('READY', github ? 'GitHub source selected; enter owner/repository' : 'local-safe');
-    el('agentScope').textContent = github ? 'managed GitHub worktree · not mounted' : 'root locked · local';
+    resetSourceActions();
+    if (type === 'github') {
+      setState('READY', 'GitHub source selected; enter owner/repository');
+      el('agentScope').textContent = 'managed GitHub worktree · not mounted';
+    } else if (type === 'googledrive') {
+      setState('READY', 'Google Drive source selected; enter a Drive for desktop path');
+      el('agentScope').textContent = 'managed Google Drive mirror · not mounted';
+    } else {
+      setState('READY', 'local-safe');
+      el('agentScope').textContent = 'root locked · local';
+    }
   };
   el('agentRunButton').onclick = runTask;
   el('agentApplyButton').onclick = applyPrepared;
@@ -278,7 +341,8 @@
   el('agentCommitButton').onclick = commitGitHub;
   el('agentPushButton').onclick = pushGitHub;
   el('agentPrButton').onclick = openGitHubPr;
-  el('agentCancelButton').onclick = () => { hideReview(); resetGitActions(); setState('READY', 'prepared ChangeSet discarded; no files changed'); };
+  el('agentDriveSyncButton').onclick = syncGoogleDrive;
+  el('agentCancelButton').onclick = () => { hideReview(); resetSourceActions(); setState('READY', 'prepared ChangeSet discarded; no files changed'); };
   el('agentTaskInput').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); runTask(); }
   });
