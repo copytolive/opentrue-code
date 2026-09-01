@@ -36,9 +36,7 @@
       '#fileActions [data-action="ai-import"]',
       '#editorSendAiButton',
       '#editorImportAiButton',
-    ]) {
-      document.querySelectorAll(selector).forEach((node) => node.remove());
-    }
+    ]) document.querySelectorAll(selector).forEach((node) => node.remove());
   }
   removeProviderDomActions();
   requestAnimationFrame(removeProviderDomActions);
@@ -54,8 +52,7 @@
   restoreRailWidths();
   window.addEventListener('resize', () => requestAnimationFrame(restoreRailWidths));
 
-  const deviceButtons = [...document.querySelectorAll('.device-button[data-device]')];
-  for (const button of deviceButtons) {
+  for (const button of document.querySelectorAll('.device-button[data-device]')) {
     button.addEventListener('click', () => requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))));
   }
 
@@ -72,6 +69,7 @@
   const deviceBar = document.querySelector('.preview-devicebar');
   const previewSurface = document.getElementById('previewSurface');
   const previewTab = document.getElementById('previewTabButton');
+  const inspectorTab = document.getElementById('inspectorTabButton');
   let fullscreen = false;
   let fullscreenButton = document.getElementById('previewFullscreenButton');
   if (deviceBar && !fullscreenButton) {
@@ -105,6 +103,7 @@
   }
 
   if (fullscreenButton) fullscreenButton.onclick = () => setFullscreen(!fullscreen);
+  inspectorTab?.addEventListener('click', () => { if (fullscreen) setFullscreen(false); });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && fullscreen) {
       event.preventDefault();
@@ -112,7 +111,7 @@
     }
   });
 
-  if (previewSurface) {
+  if (previewSurface && typeof ResizeObserver === 'function') {
     const observer = new ResizeObserver(() => window.dispatchEvent(new Event('resize')));
     observer.observe(previewSurface);
   }
