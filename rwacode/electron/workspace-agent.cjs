@@ -64,9 +64,10 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
 
   async function explicitGitAction(action, payload = {}, transactionId = null) {
     if (workspaceAdapter.type !== 'github') throw new Error('GitHub action requires an @GitHub workspace');
-    const tx = transactionId ? transactions.getPublic?.(transactionId) : null;
-    const paths = tx?.touched || transactions.status().lastTransaction?.touched || [];
-    if (action === 'commit') return workspaceAdapter.commit({ message:payload.message, paths });
+    const last = transactions.status().lastTransaction;
+    if (!last || last.status !== 'APPLIED') throw new Error('GitHub commit/push/PR requires an applied RWACode transaction');
+    if (transactionId && last.id !== transactionId) throw new Error('GitHub action transaction does not match the active applied transaction');
+    if (action === 'commit') return workspaceAdapter.commit({ message:payload.message, paths:last.touched });
     if (action === 'push') return workspaceAdapter.push();
     if (action === 'pr') return workspaceAdapter.createPullRequest({ title:payload.title, body:payload.body });
     throw new Error('unsupported explicit GitHub action');
