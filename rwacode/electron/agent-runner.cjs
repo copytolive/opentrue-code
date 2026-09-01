@@ -5,34 +5,18 @@ const fsp = fs.promises;
 const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
+const { createProviderChatRunner } = require('./provider-chat-runner.cjs');
 
-// Only official runners with a constrained non-interactive planning mode are
-// active. Browser-provider DOM automation is never used as an agent backend.
-const ALLOWLIST = ['codex', 'claude'];
+// Automated provider web pages are never used as an agent backend. Official API
+// adapters and constrained official CLIs are the only non-literal planning routes.
+const ALLOWLIST = ['chatgpt','claude','gemini','deepseek','codex'];
 const MAX_RUNNER_OUTPUT_BYTES = 2 * 1024 * 1024;
 const RUNNER_TIMEOUT_MS = 120000;
 const CHANGESET_SCHEMA = {
-  type:'object',
-  additionalProperties:false,
-  required:['version','summary','operations'],
+  type:'object', additionalProperties:false, required:['version','summary','operations'],
   properties:{
-    version:{ const:1 },
-    summary:{ type:'string', minLength:1, maxLength:500 },
-    operations:{
-      type:'array',
-      maxItems:24,
-      items:{
-        type:'object',
-        additionalProperties:false,
-        required:['type','path'],
-        properties:{
-          type:{ enum:['MODIFY','CREATE','RENAME','DELETE'] },
-          path:{ type:'string', minLength:1 },
-          content:{ type:'string' },
-          to:{ type:'string' },
-        },
-      },
-    },
+    version:{ const:1 }, summary:{ type:'string', minLength:1, maxLength:500 },
+    operations:{ type:'array', maxItems:24, items:{ type:'object', additionalProperties:false, required:['type','path'], properties:{ type:{ enum:['MODIFY','CREATE','RENAME','DELETE'] }, path:{ type:'string', minLength:1 }, content:{ type:'string' }, to:{ type:'string' } } } },
   },
 };
 
@@ -86,29 +70,22 @@ function runnerPrompt(task, contextText) {
   return [
     'You are the planning-only coding agent inside RWACode.',
     'The complete project context that you may use is embedded below.',
-    'Do not edit files. Do not create files. Do not use browser automation. Do not use network access.',
-    'Do not request or read browser cookies, sessions, tokens, credentials, or provider web pages.',
+    'Do not edit files. Do not create files. Do not use browser automation or provider web pages.',
+    'Do not request or read browser cookies, sessions, tokens, credentials, or private browser state.',
     'Return ONLY a JSON ChangeSet matching this shape:',
     '{"version":1,"summary":"...","operations":[{"type":"MODIFY|CREATE|RENAME|DELETE","path":"relative/path","content":"complete UTF-8 text for CREATE/MODIFY","to":"relative/path for RENAME"}]}',
-    'For MODIFY and CREATE, content must be the complete final UTF-8 file contents, not a patch.',
+    'For MODIFY and CREATE, content must be complete final UTF-8 file contents, never a patch.',
     'Paths must be relative to the workspace root. Never include shell commands.',
     'Touch the minimum set of files required for the user task. Preserve unrelated behavior.',
     'If supplied context is insufficient to make a safe concrete edit, return an empty operations array and explain the missing context in summary.',
-    '',
-    contextText,
-    '',
-    '[RWACODE USER TASK]',
-    String(task || '').trim(),
-    '[END RWACODE USER TASK]',
+    '', contextText, '', '[RWACODE USER TASK]', String(task || '').trim(), '[END RWACODE USER TASK]',
   ].join('\n');
 }
 
 function extractJsonObject(text) {
   const raw = String(text || '').trim();
-  const direct = raw.match(/^\s*\{[\s\S]*\}\s*$/);
-  if (direct) return JSON.parse(direct[0]);
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) return JSON.parse(fenced[1]);
+  const direct = raw.match(/^\s*\{[\s\S]*\}\s*$/); if (direct) return JSON.parse(direct[0]);
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fenced) return JSON.parse(fenced[1]);
   const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
   if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
   throw new Error('agent runner did not return a JSON ChangeSet');
@@ -118,28 +95,13 @@ function runProcess(executable, args, { cwd, timeoutMs = RUNNER_TIMEOUT_MS, env 
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd, shell:false, windowsHide:true, stdio:['ignore','pipe','pipe'], env:{ ...env } });
     let stdout = Buffer.alloc(0); let stderr = Buffer.alloc(0); let settled = false;
-    const finishReject = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.kill('SIGTERM');
-      reject(error);
-    };
+    const finishReject = (error) => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGTERM'); reject(error); };
     const timer = setTimeout(() => finishReject(new Error('agent runner timed out')), timeoutMs);
-    const append = (current, chunk) => {
-      const next = Buffer.concat([current, Buffer.from(chunk)]);
-      if (next.length > MAX_RUNNER_OUTPUT_BYTES) throw new Error('agent runner output exceeded limit');
-      return next;
-    };
+    const append = (current, chunk) => { const next = Buffer.concat([current, Buffer.from(chunk)]); if (next.length > MAX_RUNNER_OUTPUT_BYTES) throw new Error('agent runner output exceeded limit'); return next; };
     child.stdout.on('data', (chunk) => { try { stdout = append(stdout, chunk); } catch (error) { finishReject(error); } });
     child.stderr.on('data', (chunk) => { try { stderr = append(stderr, chunk); } catch (error) { finishReject(error); } });
     child.on('error', finishReject);
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true; clearTimeout(timer);
-      if (code !== 0) return reject(new Error(`agent runner exited ${code}: ${stderr.toString('utf8').trim().slice(0, 600)}`));
-      resolve({ stdout:stdout.toString('utf8'), stderr:stderr.toString('utf8') });
-    });
+    child.on('close', (code) => { if (settled) return; settled = true; clearTimeout(timer); if (code !== 0) return reject(new Error(`agent runner exited ${code}: ${stderr.toString('utf8').trim().slice(0,600)}`)); resolve({ stdout:stdout.toString('utf8'), stderr:stderr.toString('utf8') }); });
   });
 }
 
@@ -154,67 +116,79 @@ async function runCodexPlanner(executable, prompt, { processRunner = runProcess,
   const schemaPath = path.join(planningRoot, 'changeset.schema.json');
   try {
     await fsp.writeFile(schemaPath, JSON.stringify(CHANGESET_SCHEMA), { encoding:'utf8', mode:0o600 });
-    const result = await processRunner(executable, [
-      'exec',
-      '--sandbox','read-only',
-      '--color','never',
-      '--skip-git-repo-check',
-      '--output-schema',schemaPath,
-      prompt,
-    ], { cwd:planningRoot, env });
+    const result = await processRunner(executable, ['exec','--sandbox','read-only','--color','never','--skip-git-repo-check','--output-schema',schemaPath,prompt], { cwd:planningRoot, env });
     return extractJsonObject(result.stdout);
-  } finally {
-    await fsp.rm(planningRoot, { recursive:true, force:true }).catch(() => {});
-  }
+  } finally { await fsp.rm(planningRoot, { recursive:true, force:true }).catch(() => {}); }
 }
 
-function createAgentRunner({ root, projectContext, adapter, env = process.env, executableFinder = findExecutable, processRunner = runProcess, tempRoot = os.tmpdir() } = {}) {
+async function runClaudeCli(executable, prompt, { processRunner, env, root }) {
+  const schema = JSON.stringify({ type:'object', required:['version','summary','operations'], properties:{ version:{const:1}, summary:{type:'string'}, operations:{type:'array'} } });
+  const result = await processRunner(executable, ['-p',prompt,'--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root, env });
+  return parseClaudeOutput(result.stdout);
+}
+
+function createAgentRunner({ root, projectContext, adapter, env = process.env, executableFinder = findExecutable, processRunner = runProcess, tempRoot = os.tmpdir(), providerRunner = null } = {}) {
   if (!root || !projectContext || !adapter) throw new Error('AgentRunner requires root, projectContext, and adapter');
+  const chatProviders = providerRunner || createProviderChatRunner({ env });
+
   function availability() {
     const claude = executableFinder('claude', env);
     const gemini = executableFinder('gemini', env);
     const codex = executableFinder('codex', env);
     return {
       localLiteral:{ available:true, mode:'deterministic-safe-replacement' },
+      providers:chatProviders.availability(),
       codex:{ available:Boolean(codex), detected:Boolean(codex), executable:codex || null, mode:'official-cli-read-only-context-plan' },
       claude:{ available:Boolean(claude), executable:claude || null, mode:'official-cli-plan-read-glob-grep-only' },
       gemini:{ available:false, detected:Boolean(gemini), executable:gemini || null, mode:'disabled-headless-plan-can-auto-transition-to-yolo' },
     };
   }
 
-  async function plan(task) {
+  async function plan(task, { provider = 'auto' } = {}) {
     const cleanTask = String(task || '').trim();
     if (!cleanTask) throw new Error('agent task is empty');
     const literal = await deterministicLiteralPlan(cleanTask, projectContext, adapter);
     if (literal) return literal;
+
     const context = await projectContext.build(cleanTask);
     const prompt = runnerPrompt(cleanTask, context.text);
     const available = availability();
+    const selected = String(provider || 'auto').trim().toLowerCase();
+    const evidence = { contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes, requestedProvider:selected };
     const failures = [];
 
+    const tryProviderApi = async (id) => {
+      if (!available.providers?.[id]?.available) return null;
+      try { return { runner:`${id}-official-api`, changeSet:await chatProviders.plan(id, prompt), evidence }; }
+      catch (error) { failures.push(`${id}: ${error.message}`); return null; }
+    };
+
+    if (selected !== 'auto') {
+      if (!['chatgpt','claude','gemini','deepseek'].includes(selected)) throw new Error(`unsupported chat provider selection: ${selected}`);
+      const apiResult = await tryProviderApi(selected); if (apiResult) return apiResult;
+      if (selected === 'chatgpt' && available.codex.available) {
+        try { return { runner:'chatgpt-openai-official-cli', changeSet:await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot }), evidence:{ ...evidence, fallback:'official-openai-codex-cli' } }; }
+        catch (error) { failures.push(`OpenAI CLI fallback: ${error.message}`); }
+      }
+      if (selected === 'claude' && available.claude.available) {
+        try { return { runner:'claude-official-cli', changeSet:await runClaudeCli(available.claude.executable, prompt, { processRunner, env, root }), evidence:{ ...evidence, fallback:'official-claude-code-cli' } }; }
+        catch (error) { failures.push(`Claude CLI fallback: ${error.message}`); }
+      }
+      const why = failures.length ? failures.join(' | ') : `${selected} official automation is not configured`;
+      throw new Error(`${why}. Configure an official provider API route (credential + RWACode model environment) or an approved same-provider CLI fallback. Native provider web stays MANUAL_ONLY; RWACode never scrapes browser conversations.`);
+    }
+
+    for (const id of ['chatgpt','claude','gemini','deepseek']) { const result = await tryProviderApi(id); if (result) return result; }
     if (available.codex.available) {
-      try {
-        const changeSet = await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot });
-        return { runner:'codex', changeSet, evidence:{ contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes } };
-      } catch (error) { failures.push(`Codex: ${error.message}`); }
+      try { return { runner:'openai-official-cli', changeSet:await runCodexPlanner(available.codex.executable, prompt, { processRunner, env, tempRoot }), evidence:{ ...evidence, fallback:'official-openai-codex-cli' } }; }
+      catch (error) { failures.push(`OpenAI CLI: ${error.message}`); }
     }
-
     if (available.claude.available) {
-      try {
-        const schema = JSON.stringify({ type:'object', required:['version','summary','operations'], properties:{ version:{const:1}, summary:{type:'string'}, operations:{type:'array'} } });
-        const result = await processRunner(available.claude.executable, ['-p',prompt,'--output-format','json','--json-schema',schema,'--permission-mode','plan','--tools','Read,Glob,Grep','--no-session-persistence','--no-chrome','--max-turns','8'], { cwd:root, env });
-        return { runner:'claude', changeSet:parseClaudeOutput(result.stdout), evidence:{ contextFiles:context.files, indexedFiles:context.indexedFiles, contextBytes:context.bytes } };
-      } catch (error) { failures.push(`Claude: ${error.message}`); }
+      try { return { runner:'claude-official-cli', changeSet:await runClaudeCli(available.claude.executable, prompt, { processRunner, env, root }), evidence:{ ...evidence, fallback:'official-claude-code-cli' } }; }
+      catch (error) { failures.push(`Claude CLI: ${error.message}`); }
     }
-
-    const disabled = [];
-    if (available.gemini.detected) disabled.push('Gemini CLI detected but disabled because current headless Plan Mode may auto-transition to YOLO execution');
-    const detail = failures.length
-      ? failures.join(' | ')
-      : disabled.length
-        ? disabled.join(' | ')
-        : 'No supported official planning CLI is available.';
-    throw new Error(`${detail} Sign in to the official Codex CLI or Claude Code, or use an unambiguous literal replacement task. Browser-provider automation remains MANUAL_ONLY.`);
+    if (available.gemini.detected) failures.push('Gemini CLI detected but headless automation remains disabled because its safe planning boundary is not enforced here');
+    throw new Error(`${failures.join(' | ') || 'No approved provider automation route is available.'} Browser-provider automation remains MANUAL_ONLY.`);
   }
 
   return { plan, availability, allowlist:[...ALLOWLIST] };
