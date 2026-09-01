@@ -9,6 +9,8 @@ From `rwacode/`:
 - `npm run verify:fast` — deterministic preflight, syntax, unit/security tests.
 - `npm run verify:package` — build Intel + Apple Silicon packages, generate/verify manifest and hashes, then smoke-launch the packaged Intel app to shell READY.
 - `npm run verify:release` — complete local/release gate (`verify:fast` + `verify:package`).
+- `bash scripts/real-mac-final.sh` — physical Mac acceptance against the exact public release for current `main`.
+- `bash scripts/protect-main.sh --apply` — explicit one-time GitHub branch-protection install through an authenticated repository-admin `gh` session.
 
 These commands are the source of truth. GitHub Actions orchestrates them; acceptance logic should not be duplicated in workflow shell fragments.
 
@@ -29,7 +31,7 @@ These commands are the source of truth. GitHub Actions orchestrates them; accept
 | G0 | committed lockfile, Node >=22, forbidden legacy runtime absent, workflow candidate freeze |
 | G1 | syntax + unit/security regression suite |
 | G2 | root-locked Local/GitHub/Drive transaction integration |
-| G3 | source security always; container security only when relevant on PRs, full on main/schedule |
+| G3 | source security always; container security only when relevant on PRs, full on main/schedule; stable `security-gate` aggregates the result |
 | G4 | macOS x86_64 + arm64 DMG/ZIP build |
 | G5 | `build-manifest.json` + `SHA256SUMS` exactly match built files and candidate SHA |
 | G6 | packaged `.app` reaches explicit shell READY; runner cleanup is not confused with a user Quit action |
@@ -66,14 +68,30 @@ Every RWACode-affecting push to `main` runs `.github/workflows/rwacode-release.y
 - `build-manifest.json`
 - `SHA256SUMS`
 
+## Physical Real-Mac gate
+
+`bash rwacode/scripts/real-mac-final.sh` is intentionally interactive. It fast-forwards the local repository to exact `origin/main`, resolves the public release tag for that SHA, downloads the correct Intel/Apple-Silicon ZIP plus `SHA256SUMS`, verifies the public artifact, launches that packaged app, creates one controlled `VALUE=12345` fixture, and pauses only for the human-only checks that CI cannot perform:
+
+- provider-native mouse/keyboard input with no RWACode DOM automation;
+- Preview/Inspector behavior;
+- Review -> Apply on the controlled fixture;
+- normal Cmd+Q;
+- packaged-app restart and browser-session persistence;
+- durable Undo after restart.
+
+The script itself verifies the physical file changed after Apply and that SHA-256 after Undo is byte-for-byte identical to BEFORE. It prints `REAL_MAC_FINAL=PASS` only after all physical acknowledgements and machine-verifiable assertions pass.
+
 ## Repository-admin gate
 
-GitHub branch/ruleset protection is repository administration state, not source code. The required target is:
+The security workflow exposes one stable required context, `security-gate`, so branch protection never depends on a path-conditional container job. The canonical required contexts are:
 
-- require pull request before merge;
-- require the unique RWACode Desktop, Acceptance, Bugbot, and Security checks;
-- require conversation resolution;
-- block force pushes and branch deletion;
-- do not bypass required checks.
+- `test-and-build-macos`
+- `acceptance`
+- `bugbot`
+- `security-gate`
 
-If the connected GitHub integration cannot mutate repository rulesets, this is the only one-time admin setting that cannot be implemented by repository source commits.
+When a connected GitHub integration cannot mutate repository administration state, run this explicit owner-side command after the final checks exist:
+
+`bash rwacode/scripts/protect-main.sh --apply`
+
+The script uses GitHub's branch-protection REST endpoint through the already-authenticated `gh` account. It requires pull requests with zero mandatory reviewers, strict up-to-date status checks, conversation resolution, administrator enforcement, and disables force pushes/deletion. It then reads the protection back and prints `BRANCH_PROTECTION=PASS` only when the exact contexts and safety toggles match.
