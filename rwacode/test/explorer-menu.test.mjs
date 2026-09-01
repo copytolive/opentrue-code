@@ -19,7 +19,7 @@ test('right-click invokes a narrow native Electron context menu only for a real 
   assert.match(js, /tree\.addEventListener\('contextmenu'/);
   assert.match(js, /closest\('\.file-row\[data-path\]'\)/);
   assert.match(js, /event\.stopImmediatePropagation\(\)/);
-  assert.match(js, /api\.explorer\.showContextMenu\(relativePath\)/);
+  assert.match(js, /api\.explorer\.showContextMenu\(row\.dataset\.path\s*\|\|\s*['"]{2}\)/);
   assert.match(preload, /showContextMenu:\s*\(relativePath\)\s*=>\s*ipcRenderer\.invoke\('explorer:contextMenu'/);
   assert.match(explorerOps, /ipcMain\.handle\('explorer:contextMenu'/);
   assert.match(explorerOps, /Menu\.buildFromTemplate/);
@@ -44,7 +44,7 @@ test('native menu preserves file/folder-specific real actions without provider-D
 });
 
 test('clicked row remains the exact backend action target', () => {
-  assert.match(js, /state\.selectedPath = row\.dataset\.path/);
+  assert.match(js, /state\.selectedPath\s*=\s*row\.dataset\.path(?:\s*\|\|\s*null)?/);
   assert.match(js, /source\.click\(\)/);
   assert.doesNotMatch(js, /renderDirectory\(/);
 });
