@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feat/rwacode-browser-workspace-20260831
     paths:
       - 'rwacode/**'
       - '.github/workflows/rwacode-desktop.yml'
@@ -17,38 +16,71 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rwacode-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RWACODE_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
-  test-and-build-macos-x64:
+  test-and-build-macos:
     runs-on: macos-15-intel
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RWACODE_CANDIDATE_SHA }}
+          persist-credentials: false
+      - name: Freeze candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "RWACODE_CANDIDATE_SHA=$RWACODE_CANDIDATE_SHA"
+          echo "RWACODE_CHECKED_OUT_SHA=$ACTUAL"
+          test "$ACTUAL" = "$RWACODE_CANDIDATE_SHA"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Install dependencies
+          cache: npm
+          cache-dependency-path: rwacode/package-lock.json
+      - name: Verify committed lockfile
+        run: test -f rwacode/package-lock.json
+      - name: Install dependencies reproducibly
         working-directory: rwacode
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+      - name: Static preflight
+        working-directory: rwacode
+        run: npm run verify:static
       - name: Unit and security tests
         working-directory: rwacode
         run: npm test
-      - name: Syntax checks
-        working-directory: rwacode
-        run: npm run check
-      - name: Build unsigned macOS x64 DMG and ZIP
+      - name: Build unsigned macOS Intel and Apple Silicon DMG and ZIP
         working-directory: rwacode
         run: npm run build:mac
-      - name: List artifacts
+      - name: Generate build manifest
         working-directory: rwacode
-        run: find dist -maxdepth 2 -type f -print
+        env:
+          RWACODE_CANDIDATE_SHA: ${{ env.RWACODE_CANDIDATE_SHA }}
+        run: npm run manifest:build
+      - name: Verify artifact contract
+        working-directory: rwacode
+        run: npm run verify:artifacts
+      - name: Smoke launch packaged shell to READY
+        working-directory: rwacode
+        run: npm run smoke:packaged
       - name: Upload RWACode macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: rwacode-macos-x64-${{ github.run_id }}
+          name: rwacode-macos-x64-arm64-${{ github.run_id }}
           path: |
             rwacode/dist/*.dmg
             rwacode/dist/*.zip
+            rwacode/dist/build-manifest.json
+            rwacode/dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 14

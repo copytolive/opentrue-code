@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.ref }}
+  group: security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -19,6 +19,34 @@ env:
   CODE_SERVER_IMAGE: codercom/code-server:4.133.0@sha256:e073a441c61c85821a7f16b64cf93b4e77b4092899bb1f3bed906fbd558afd62
 
 jobs:
+  scope:
+    runs-on: ubuntu-24.04
+    outputs:
+      container: ${{ steps.scope.outputs.container }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: scope
+        name: Classify container-security relevance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "container=true" >> "$GITHUB_OUTPUT"
+            echo "CONTAINER_SECURITY_SCOPE=FULL_NON_PR"
+            exit 0
+          fi
+          BASE="${{ github.event.pull_request.base.sha }}"
+          git diff --name-only "$BASE"...HEAD | tee /tmp/security-changed-files.txt
+          if grep -Eq '^(ui/|control-plane/|editor/|workers/|local-bridge/|Dockerfile|\.github/workflows/security\.yml$)' /tmp/security-changed-files.txt; then
+            echo "container=true" >> "$GITHUB_OUTPUT"
+            echo "CONTAINER_SECURITY_SCOPE=RELEVANT"
+          else
+            echo "container=false" >> "$GITHUB_OUTPUT"
+            echo "CONTAINER_SECURITY_SCOPE=NOT_APPLICABLE"
+          fi
+
   source-security:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -96,6 +124,8 @@ jobs:
             fs --scanners vuln,misconfig --severity CRITICAL --ignore-unfixed --exit-code 1 .
 
   container-security:
+    needs: scope
+    if: needs.scope.outputs.container == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

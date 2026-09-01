@@ -1,24 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const bridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
-const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
-const { installProviderCosmetics } = require('../electron/ai-bridge.cjs');
+const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
+const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');
+const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 
-test('provider cosmetics are permanently disabled for the native browser surface', async () => {
-  assert.match(bridge, /async function installProviderCosmetics\(\)/);
-  assert.match(bridge, /Strict native-browser contract/);
-  assert.equal(await installProviderCosmetics(), false);
-  assert.doesNotMatch(bridge, /executeJavaScript|MutationObserver|observer\.observe/);
-  assert.doesNotMatch(preload, /executeJavaScript|providerCosmetics|cosmeticScript/);
+test('provider cosmetics/DOM bridge code is absent from production runtime',()=>{
+  assert.doesNotMatch(main,/executeJavaScript|insertCSS|removeInsertedCSS|MutationObserver|prompt-textarea|send-button/);
+  assert.doesNotMatch(preload,/executeJavaScript|providerCosmetics|cosmeticScript|ai:sendFile|ai:readReply/);
+  assert.doesNotMatch(pkg.scripts.check,/ai-bridge\.cjs|chat-first-ui\.js|chat-first-v2\.css/);
 });
 
-test('provider browser DOM is never hidden, rewritten, inspected, or restyled by the bridge', () => {
-  assert.doesNotMatch(bridge, /document\.querySelector|querySelectorAll\(|style\.display|style\.visibility/);
-  assert.doesNotMatch(bridge, /textContent\s*=|innerHTML\s*=|execCommand\(|dispatchEvent\(/);
-  assert.match(bridge, /Native provider browser is MANUAL_ONLY/);
-  assert.match(bridge, /return false/);
+test('native provider pages are never hidden rewritten inspected or restyled by RWACode',()=>{
+  assert.doesNotMatch(main,/document\.querySelector|querySelectorAll\(|style\.display|style\.visibility|execCommand\(|dispatchEvent\(/);
+  assert.match(main,/new WebContentsView/);
+  assert.match(main,/sandbox:true/);
+  assert.match(main,/nodeIntegration:false/);
 });
