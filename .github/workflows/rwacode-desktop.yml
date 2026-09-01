@@ -49,8 +49,18 @@ jobs:
         run: |
           set -euo pipefail
           find dist -maxdepth 2 -type f -print
-          find dist -maxdepth 1 -type f \( -name '*x64*.dmg' -o -name '*x64*.zip' \) -print -quit | grep -q .
-          find dist -maxdepth 1 -type f \( -name '*arm64*.dmg' -o -name '*arm64*.zip' \) -print -quit | grep -q .
+          test -f dist/RWACode-0.3.0.dmg
+          test -f dist/RWACode-0.3.0-mac.zip
+          test -f dist/RWACode-0.3.0-arm64.dmg
+          test -f dist/RWACode-0.3.0-arm64-mac.zip
+          X64_BIN='dist/mac/RWACode.app/Contents/MacOS/RWACode'
+          ARM64_BIN='dist/mac-arm64/RWACode.app/Contents/MacOS/RWACode'
+          test -x "$X64_BIN"
+          test -x "$ARM64_BIN"
+          file "$X64_BIN" | tee /tmp/rwacode-x64-file.txt
+          file "$ARM64_BIN" | tee /tmp/rwacode-arm64-file.txt
+          grep -Eq 'x86_64|x86-64' /tmp/rwacode-x64-file.txt
+          grep -q 'arm64' /tmp/rwacode-arm64-file.txt
       - name: Upload RWACode macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
