@@ -34,6 +34,22 @@ contextBridge.exposeInMainWorld('rwacode', {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  const ensurePreviewV24 = () => {
+    if (!document.getElementById('previewRealMacV24Style')) {
+      const link = document.createElement('link');
+      link.id = 'previewRealMacV24Style';
+      link.rel = 'stylesheet';
+      link.href = './preview-real-mac-v24.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('previewRealMacV24Script')) {
+      const script = document.createElement('script');
+      script.id = 'previewRealMacV24Script';
+      script.src = './preview-real-mac-v24.js';
+      document.body.appendChild(script);
+    }
+  };
+
   if (!document.getElementById('functionalRightPanelStyle')) {
     const link = document.createElement('link');
     link.id = 'functionalRightPanelStyle';
@@ -41,11 +57,15 @@ window.addEventListener('DOMContentLoaded', () => {
     link.href = './functional-right-panel.css';
     document.head.appendChild(link);
   }
-  if (!document.getElementById('functionalRightPanelScript')) {
+  const existing = document.getElementById('functionalRightPanelScript');
+  if (!existing) {
     const script = document.createElement('script');
     script.id = 'functionalRightPanelScript';
     script.src = './functional-right-panel.js';
+    script.addEventListener('load', ensurePreviewV24, { once:true });
     document.body.appendChild(script);
+  } else {
+    setTimeout(ensurePreviewV24, 0);
   }
 }, { once:true });
 
