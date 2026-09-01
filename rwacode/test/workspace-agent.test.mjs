@@ -84,7 +84,7 @@ test('agent transaction rejects traversal and symlink escape paths', async () =>
   await assert.rejects(tx.prepare({version:1,operations:[{type:'MODIFY',path:'escape.txt',content:'x'}]}));
 });
 
-test('runner availability is explicit and executable discovery does not assume a CLI exists', () => {
+test('runner availability is explicit; unsafe headless runners stay detected but disabled', () => {
   const workspace = root();
   fs.writeFileSync(path.join(workspace, 'demo.txt'), 'hello\n');
   const adapter = createLocalWorkspaceAdapter({ root:workspace });
@@ -93,7 +93,10 @@ test('runner availability is explicit and executable discovery does not assume a
   const status = runner.availability();
   assert.equal(status.localLiteral.available, true);
   assert.equal(typeof status.claude.available, 'boolean');
-  assert.equal(typeof status.gemini.available, 'boolean');
+  assert.equal(status.gemini.available, false);
+  assert.equal(typeof status.gemini.detected, 'boolean');
+  assert.match(status.gemini.mode, /disabled-headless-plan/);
   assert.equal(status.codex.available, false);
+  assert.equal(typeof status.codex.detected, 'boolean');
   assert.equal(findExecutable('rwacode-command-that-must-not-exist-987654321', { PATH:'' }), null);
 });
