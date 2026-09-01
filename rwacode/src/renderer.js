@@ -213,61 +213,11 @@ function extractReplacement(text) {
 }
 
 async function sendSelectedToAi() {
-  const target = state.editorPath || state.selectedPath;
-  if (!target) { status('AI bridge: select a local file first'); return; }
-  try {
-    if (state.editorPath === target && state.editorDirty) await saveEditor();
-    if (state.editorPath && !(await closeEditor(false))) return;
-    if (state.proposalPath) await cancelProposal();
-    const instruction = window.prompt('Instruction for the active AI about this local file', 'Read this file and explain it. If changes are needed, return the complete replacement file in one fenced code block.');
-    if (instruction === null) return;
-    $('signalAiBridge').textContent = 'SENDING';
-    $('aiBridgeBadge').textContent = 'AI BRIDGE · SENDING';
-    const result = await api.ai.sendFile(target, instruction);
-    $('fileActions').classList.add('hidden');
-    $('signalAiBridge').textContent = result.submitted ? 'SENT' : 'COMPOSER';
-    $('aiBridgeBadge').textContent = `AI BRIDGE · ${result.provider.toUpperCase()}`;
-    status(result.submitted
-      ? `Sent ${target} to ${result.provider} · only this file was shared`
-      : `${result.provider}: local context inserted into composer; press Send manually`);
-  } catch (error) {
-    $('signalAiBridge').textContent = 'ERROR';
-    $('aiBridgeBadge').textContent = 'AI BRIDGE · ERROR';
-    status(`AI bridge: ${error.message}`);
-  }
+  status('Native provider browser is manual-only. Use the RWACode Workspace Agent command surface for project changes.');
 }
 
 async function importAiReply() {
-  const target = state.editorPath || state.selectedPath;
-  if (!target) { status('AI bridge: select the target local file first'); return; }
-  try {
-    if (state.editorPath === target && state.editorDirty) await saveEditor();
-    if (state.editorPath) await closeEditor(false);
-    $('signalAiBridge').textContent = 'IMPORT';
-    $('aiBridgeBadge').textContent = 'AI BRIDGE · IMPORTING';
-    const result = await api.ai.readReply();
-    const proposal = extractReplacement(result.text);
-    state.proposalPath = target;
-    state.proposalProvider = result.provider;
-    await api.browser.setVisible(false);
-    $('newTabPage').classList.add('hidden');
-    $('editorPanel').classList.add('hidden');
-    $('proposalPanel').classList.remove('hidden');
-    $('proposalPath').textContent = target;
-    $('proposalProvider').textContent = `${result.provider} · latest assistant reply`;
-    $('proposalText').value = proposal.content;
-    $('proposalMeta').textContent = proposal.fenced
-      ? 'Complete fenced replacement detected. Review every line before Apply.'
-      : 'No fenced replacement was detected. The full assistant reply is shown; review carefully before Apply.';
-    $('signalAiBridge').textContent = 'REVIEW';
-    $('aiBridgeBadge').textContent = `AI BRIDGE · REVIEW ${result.provider.toUpperCase()}`;
-    $('fileActions').classList.add('hidden');
-    status(`AI proposal imported from ${result.provider} · no local file changed yet`);
-  } catch (error) {
-    $('signalAiBridge').textContent = 'ERROR';
-    $('aiBridgeBadge').textContent = 'AI BRIDGE · ERROR';
-    status(`Import AI reply: ${error.message}`);
-  }
+  status('Native provider browser replies are not scraped. Use the RWACode Workspace Agent command surface for project changes.');
 }
 
 async function cancelProposal() {
@@ -305,8 +255,11 @@ async function applyProposal() {
 
 async function fileAction(action) {
   try {
-    if (action === 'ai-send') { await sendSelectedToAi(); return; }
-    if (action === 'ai-import') { await importAiReply(); return; }
+    if (action === 'ai-send' || action === 'ai-import') {
+      status('Native provider browser is manual-only; provider DOM bridge actions are disabled.');
+      $('fileActions').classList.add('hidden');
+      return;
+    }
     if (action === 'new-file' || action === 'new-folder') {
       const name = window.prompt(action === 'new-file' ? 'New file name' : 'New folder name');
       if (!name) return;
@@ -341,7 +294,8 @@ function updateBounds() {
   const browserRect = $('browserSurface').getBoundingClientRect();
   api.browser.setBounds({ x: browserRect.x, y: browserRect.y, width: browserRect.width, height: browserRect.height }).catch(() => {});
   const previewRect = $('previewSurface').getBoundingClientRect();
-  const bounds = state.rightCollapsed || previewRect.width < 2 || previewRect.height < 2
+  const previewPanelHidden = $('previewContent').classList.contains('hidden');
+  const bounds = state.rightCollapsed || previewPanelHidden || previewRect.width < 2 || previewRect.height < 2
     ? { x: 0, y: 0, width: 1, height: 1 }
     : { x: previewRect.x, y: previewRect.y, width: previewRect.width, height: previewRect.height };
   api.preview.setBounds(bounds).catch(() => {});
@@ -477,9 +431,11 @@ api.preview.onState((preview) => {
     state.previewLoaded = false;
     $('previewPlaceholder').classList.remove('hidden');
   } else if (next === 'ERROR') {
+    state.previewLoaded = false;
     $('previewPlaceholder').classList.remove('hidden');
     status(`Preview error · ${preview.description || preview.url || 'load failed'}`);
   }
+  updateBounds();
 });
 api.files.onChanged((change) => {
   $('fileSyncState').textContent = 'SYNC';
