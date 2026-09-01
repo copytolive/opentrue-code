@@ -8,23 +8,26 @@ const ipc=fs.readFileSync(new URL('../electron/agent-ipc.cjs',import.meta.url),'
 const html=fs.readFileSync(new URL('../src/index.html',import.meta.url),'utf8');
 const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url),'utf8');
 
-test('final command surface is source-aware and provider-aware',()=>{
-  for(const token of ['agentWorkspaceTag','agentProvider','agentTaskInput','agentRunButton','agentUndoButton']) assert.match(agentUi,new RegExp(token));
-  for(const value of ['@Local','@GitHub','@GoogleDrive','ChatGPT API','Claude API','Gemini API','DeepSeek API']) assert.match(agentUi,new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+test('final command surface is source-aware and exposes explicit manual ChangeSet review',()=>{
+  for(const token of ['agentWorkspaceTag','agentTaskInput','agentRunButton','agentManualToggleButton','agentManualInput','agentReviewChangeSetButton','agentUndoButton','agentApplyButton']) assert.match(agentUi,new RegExp(token));
+  for(const value of ['@Local','@GitHub','@GoogleDrive','Paste ChangeSet','Review ChangeSet','NO_AI_API']) assert.match(agentUi,new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(agentUi,/agentProvider|ChatGPT API|Claude API|Gemini API|DeepSeek API/);
 });
 
-test('explicit provider selections are provider-pure and have no CLI fallback',()=>{
-  assert.match(runner,/provider-pure-official-api/);
+test('free-form reasoning is fail-closed with no AI API or CLI fallback',()=>{
+  assert.match(runner,/mode:'NO_AI_API'/);
+  assert.match(runner,/providerWeb:'MANUAL_ONLY'/);
+  assert.match(runner,/providerApi:false/);
   assert.match(runner,/cliFallback:false/);
-  assert.match(runner,/RWACode will not fall back to another provider, CLI, browser scraping, cookies, or session reuse/);
-  assert.doesNotMatch(runner,/runCodexPlanner|runClaudeCli|official-cli|spawn\(/);
+  assert.match(runner,/providerAutomation:false/);
+  assert.doesNotMatch(runner,/provider-pure-official-api|runCodexPlanner|runClaudeCli|official-cli|spawn\(|createProviderChatRunner/);
 });
 
-test('target and reference context remain separate IPC inputs',()=>{
+test('target remains explicit while provider reference context is user-owned manual handoff',()=>{
   assert.match(ipc,/targetSource=options\?\.target\|\|options\?\.source/);
-  assert.match(ipc,/buildReferenceContext/);
-  assert.match(ipc,/contextSources/);
-  assert.match(ipc,/extraContextText:reference\.text/);
+  assert.match(ipc,/agent:prepareChangeSet/);
+  assert.match(preload,/prepareChangeSet/);
+  assert.doesNotMatch(ipc,/buildReferenceContext|contextSources|extraContextText|extraContextEvidence/);
 });
 
 test('legacy fake chat and provider DOM bridge are absent from production shell',()=>{

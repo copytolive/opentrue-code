@@ -6,10 +6,11 @@
   style.id='rw-agent-responsive-fix';
   style.textContent=`
     .rw-agent-row{flex-wrap:wrap!important;align-content:flex-start}
-    .rw-agent-source,.rw-agent-mode,.rw-agent-button{flex:0 0 auto}
-    #agentProvider{display:none!important}
+    .rw-agent-source,.rw-agent-button{flex:0 0 auto}
     .rw-agent-locator{flex:0 1 190px;min-width:140px;max-width:190px}
     .rw-agent-input{flex:1 1 220px;min-width:180px}
+    .rw-agent-manual{grid-template-columns:minmax(0,1fr) auto}
+    .rw-agent-manual-input{min-width:240px}
     #agentUndoButton{visibility:visible!important;display:inline-flex!important;align-items:center;justify-content:center}
     .rw-agent-git-actions,.rw-agent-drive-actions{flex-wrap:wrap}
     .rw-agent-git-actions .rw-agent-small-input{flex:1 1 180px;min-width:150px}
@@ -22,14 +23,9 @@
     body.preview-fullscreen #rightPanel .sync-card{display:none!important}
     body.preview-fullscreen #rightPanel .preview-surface{margin:0!important;border-radius:8px!important}
     body.preview-fullscreen #rightPanel .inspector-content{height:calc(100vh - 58px)!important}
-    @media (max-width:900px){.rw-agent-locator{flex-basis:160px;max-width:160px}.rw-agent-input{flex-basis:200px;min-width:160px}}
+    @media (max-width:900px){.rw-agent-locator{flex-basis:160px;max-width:160px}.rw-agent-input{flex-basis:200px;min-width:160px}.rw-agent-manual{grid-template-columns:1fr}.rw-agent-manual-actions{flex-direction:row;flex-wrap:wrap}}
   `;
   document.head.appendChild(style);
-
-  // Provider planning remains an internal optional route selected automatically.
-  // The product surface stays browser-native/manual and never asks for API keys.
-  const providerSelect=document.getElementById('agentProvider');
-  if(providerSelect)providerSelect.value='auto';
 
   function restoreRailWidths(){
     try{

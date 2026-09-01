@@ -6,7 +6,7 @@ const source=await fs.readFile(new URL('../electron/ipc-guard.cjs',import.meta.u
 const bootstrap=await fs.readFile(new URL('../electron/bootstrap.cjs',import.meta.url),'utf8');
 const preload=await fs.readFile(new URL('../electron/preload.cjs',import.meta.url),'utf8');
 const smoke=await fs.readFile(new URL('../scripts/smoke-launch.mjs',import.meta.url),'utf8');
-const responsive=await fs.readFile(new URL('../src/agent-responsive-fix.js',import.meta.url),'utf8');
+const agentUi=await fs.readFile(new URL('../src/agent-ui.js',import.meta.url),'utf8');
 
 test('packaged shell IPC bootstraps only from BrowserWindow-owned exact shell frame',()=>{
   const ownerCheck=source.indexOf('!isBrowserWindowSender(webContents)');
@@ -28,12 +28,14 @@ test('packaged READY requires a real renderer privileged IPC round-trip',()=>{
   assert.match(smoke,/RWACODE_SHELL_IPC_ROUNDTRIP=PASS/);
 });
 
-test('optional provider API selector is not exposed in the normal workbench',()=>{
-  assert.match(responsive,/#agentProvider\{display:none!important\}/);
-  assert.match(responsive,/providerSelect\.value='auto'/);
+test('provider API selector is physically absent and manual review is visible',()=>{
+  assert.doesNotMatch(agentUi,/agentProvider|ChatGPT API|Claude API|Gemini API|DeepSeek API/);
+  assert.match(agentUi,/Paste ChangeSet/);
+  assert.match(agentUi,/Review ChangeSet/);
+  assert.match(agentUi,/NO_AI_API/);
 });
 
 test('IPC trust fix does not add provider automation paths',()=>{
   assert.doesNotMatch(source,/executeJavaScript|MutationObserver|click\(|keydown|cookie/i);
-  assert.doesNotMatch(preload,/executeJavaScript|MutationObserver|auto.?send/i);
+  assert.doesNotMatch(preload,/executeJavaScript|MutationObserver|auto.?send|readReply|sendFile/i);
 });

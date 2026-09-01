@@ -49,26 +49,26 @@ test('native browser surface stays isolated from privileged shell IPC',()=>{
   assert.doesNotMatch(preload,/\bai\s*:\s*\{/);
 });
 
-test('editable target and read-only reference context stay separate in IPC',()=>{
+test('editable target is selected explicitly and provider context is never auto-collected in IPC',()=>{
   assert.match(ipc,/targetSource=options\?\.target\|\|options\?\.source/);
-  assert.match(ipc,/buildReferenceContext/);
-  assert.match(ipc,/contextSources/);
-  assert.match(ipc,/extraContextText:reference\.text/);
-  assert.match(ipc,/extraContextEvidence:reference\.evidence/);
+  assert.match(ipc,/agent:prepareChangeSet/);
+  assert.doesNotMatch(ipc,/buildReferenceContext|contextSources|extraContextText|extraContextEvidence/);
+  assert.doesNotMatch(preload,/readReply|providerContext|importAI|cookie/i);
 });
 
-test('selected provider never silently falls back to another provider or CLI',async()=>{
+test('free-form reasoning never falls back to another provider API or CLI',async()=>{
   const root=tempRoot();
   try{
     fs.writeFileSync(path.join(root,'index.html'),'<title>x</title>\n');
     const adapter=createLocalWorkspaceAdapter({root});
     const projectContext={searchText:async()=>[],build:async()=>({text:'ctx',files:['index.html'],indexedFiles:1,bytes:3})};
-    const providerRunner={availability:()=>({chatgpt:{available:false},claude:{available:false},gemini:{available:true},deepseek:{available:false}}),plan:async(provider)=>({version:1,summary:`via ${provider}`,operations:[]})};
-    const agent=createAgentRunner({root,projectContext,adapter,env:{PATH:''},providerRunner});
-    await assert.rejects(agent.plan('buat perubahan ui',{provider:'chatgpt',chatOnly:true}),/chatgpt official API route is not configured/);
-    const result=await agent.plan('buat perubahan ui',{provider:'gemini',chatOnly:true});
-    assert.equal(result.runner,'gemini-official-api');
-    assert.equal(result.evidence.resolvedProvider,'gemini');
-    assert.equal(agent.availability().routing.cliFallback,false);
+    const agent=createAgentRunner({root,projectContext,adapter});
+    await assert.rejects(agent.plan('buat perubahan ui'),/NO_AI_API/);
+    const availability=agent.availability();
+    assert.equal(availability.routing.mode,'NO_AI_API');
+    assert.equal(availability.routing.providerApi,false);
+    assert.equal(availability.routing.cliFallback,false);
+    assert.equal(availability.routing.providerWeb,'MANUAL_ONLY');
+    assert.deepEqual(agent.allowlist,[]);
   }finally{fs.rmSync(root,{recursive:true,force:true})}
 });
