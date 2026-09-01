@@ -5,24 +5,25 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const renderer = fs.readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const menu = fs.readFileSync(new URL('../src/browser-menu.js', import.meta.url), 'utf8');
+const workspace = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
+const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
 const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
 const aiBridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
 const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
-const source = `${renderer}\n${menu}`;
+const source = `${renderer}\n${menu}\n${workspace}\n${responsive}`;
 
 const requiredBindings = [
-  'profileButton', 'addProfileButton', 'renameProfileButton', 'clearProfileButton', 'deleteProfileButton',
   'newTabButton', 'backButton', 'forwardButton', 'reloadButton', 'homeButton', 'addressInput',
-  'openExternalButton', 'browserMenuButton', 'filesCollapseButton', 'rightCollapseButton',
-  'fileSearchButton', 'fileRefreshButton', 'fileMoreButton', 'editorSaveButton', 'editorCloseButton',
-  'editorRevealButton', 'proposalCancelButton', 'proposalApplyButton', 'proposalRevealButton',
-  'previewGoButton', 'previewReloadButton', 'previewExternalButton',
+  'openExternalButton', 'browserMenuButton', 'fileSearchButton', 'fileRefreshButton', 'fileMoreButton',
+  'editorSaveButton', 'editorCloseButton', 'editorRevealButton', 'proposalCancelButton',
+  'proposalApplyButton', 'proposalRevealButton', 'previewGoButton', 'previewReloadButton',
+  'previewTabButton', 'inspectorTabButton',
 ];
 
-test('every primary visible control has implementation code', () => {
+test('every visible primary shell control has implementation code', () => {
   for (const id of requiredBindings) {
-    assert.match(html, new RegExp(`id=["']${id}["']`), `${id} must exist in visible shell`);
-    assert.match(source, new RegExp(id), `${id} must have renderer implementation`);
+    assert.match(html, new RegExp(`id=["']${id}["']`), `${id} must exist in shell`);
+    assert.match(source, new RegExp(id), `${id} must have implementation code`);
   }
 });
 
@@ -31,6 +32,7 @@ test('provider quick links and preview device controls have delegated handlers',
   assert.match(renderer, /querySelectorAll\('\.provider-card'\)/);
   assert.match(html, /device-button/);
   assert.match(renderer, /querySelectorAll\('\.device-button'\)/);
+  assert.match(responsive, /previewFullscreenButton/);
 });
 
 test('browser overflow menu performs real actions instead of a status-only placeholder', () => {
@@ -41,11 +43,13 @@ test('browser overflow menu performs real actions instead of a status-only place
   assert.match(menu, /api\.profiles\.clear/);
 });
 
-test('single-click file explorer opens folders and files', () => {
-  assert.match(renderer, /entry\.type === 'directory'\) await loadDirectory\(entry\.path\)/);
-  assert.match(renderer, /entry\.type === 'file'\) await openEditor\(entry\.path\)/);
-  assert.match(html, /id="editorPanel"/);
-  assert.match(renderer, /api\.browser\.setVisible\(false\)/);
+test('Explorer selection and opening behavior is intentionally VS Code-like', () => {
+  const explorerFix = fs.readFileSync(new URL('../src/explorer-menu-fix.js', import.meta.url), 'utf8');
+  assert.match(explorerFix, /Explorer selection only establishes focus/);
+  assert.match(explorerFix, /tree\.addEventListener\('click'/);
+  assert.match(explorerFix, /row\.dataset\.type === 'directory'/);
+  assert.match(explorerFix, /tree\.addEventListener\('dblclick'/);
+  assert.match(explorerFix, /openEditor\(row\.dataset\.path\)/);
 });
 
 test('workspace file changes are watched and refreshed without manual reload', () => {
@@ -56,34 +60,26 @@ test('workspace file changes are watched and refreshed without manual reload', (
   assert.match(renderer, /loadDirectory\(state\.currentDir, true\)/);
 });
 
-test('selective AI bridge shares one chosen file and requires explicit review before write-back', () => {
-  assert.match(html, /data-action="ai-send"/);
-  assert.match(html, /data-action="ai-import"/);
-  assert.match(html, /id="proposalPanel"/);
-  assert.match(renderer, /api\.ai\.sendFile\(target, instruction\)/);
-  assert.match(renderer, /api\.ai\.readReply\(\)/);
-  assert.match(renderer, /window\.confirm\(`Replace \$\{target\}/);
-  assert.match(renderer, /api\.files\.write\(target, content\)/);
-  assert.match(menu, /editorSendAiButton/);
-  assert.match(menu, /editorImportAiButton/);
-  assert.match(aiBridge, /MAX_AI_CONTEXT_BYTES = 256 \* 1024/);
-  assert.match(aiBridge, /chatgpt\.com/);
-  assert.match(aiBridge, /claude\.ai/);
-  assert.match(aiBridge, /gemini\.google\.com/);
-  assert.match(aiBridge, /Security boundary: you are receiving only this explicitly selected file/);
-  assert.match(aiBridge, /submitted:false/);
-  assert.doesNotMatch(aiBridge, /send\.click\(\)/);
+test('provider browser is native/manual-only: no composer injection, reply scraping, or cosmetics', () => {
+  assert.match(aiBridge, /Native provider browser is MANUAL_ONLY/);
+  assert.doesNotMatch(aiBridge, /executeJavaScript/);
+  assert.doesNotMatch(aiBridge, /document\.querySelector/);
+  assert.match(aiBridge, /async function installProviderCosmetics\(\)/);
+  assert.match(aiBridge, /return false/);
+  assert.doesNotMatch(workspace, /api\.ai\.sendFile|api\.ai\.readReply/);
+  assert.match(responsive, /editorSendAiButton/);
+  assert.match(responsive, /node\.remove\(\)/);
 });
 
-test('AI reply import requires exactly one fenced replacement block', () => {
-  assert.match(aiBridge, /function extractSingleReplacement/);
-  assert.match(aiBridge, /blocks\.length !== 1/);
-  assert.match(aiBridge, /requires exactly one fenced replacement code block/);
-});
-
-test('preview initial about:blank state cannot masquerade as live', () => {
+test('Preview idle state cannot masquerade as live and Inspector does not leave native preview over it', () => {
   assert.match(main, /emitPreviewState\('IDLE'\)/);
   assert.match(main, /url === 'about:blank'\) emitPreviewState\('IDLE'\)/);
   assert.match(main, /did-fail-load/);
   assert.match(renderer, /preview\.state \|\| \(preview\.loading \? 'LOADING' : 'IDLE'\)/);
+  assert.match(workspace, /rightMode !== 'preview'/);
+  assert.match(workspace, /setPreviewNativeVisible\(false\)/);
+});
+
+test('decorative affordances that looked clickable are removed from final shell', () => {
+  assert.match(responsive, /\.security-caret,\.sync-chevron\{display:none!important\}/);
 });
