@@ -33,14 +33,14 @@ test('context menu open path has no renderer overlay or awaited clipboard IPC', 
   assert.doesNotMatch(js, /async function createMenu/);
 });
 
-test('native menu preserves file/folder-specific real actions', () => {
-  for (const action of ['new-file','new-folder','reveal','open-terminal','add-chat','cut','copy','paste','copy-path','copy-relative','rename','delete']) {
+test('native menu preserves file/folder-specific real actions without provider-DOM chat actions', () => {
+  for (const action of ['new-file','new-folder','reveal','open-terminal','cut','copy','paste','copy-path','copy-relative','rename','delete']) {
     assert.match(explorerOps, new RegExp(action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.match(explorerOps, /Open in Images Preview/);
   assert.match(explorerOps, /Find in Folder/);
   assert.match(explorerOps, /enabled:\s*canPaste/);
-  assert.match(explorerOps, /enabled:\s*canChat/);
+  assert.doesNotMatch(explorerOps, /Add (?:File|Folder) to Chat|add-chat|canChat/);
 });
 
 test('clicked row remains the exact backend action target', () => {
