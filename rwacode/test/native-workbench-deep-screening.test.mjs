@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
 const workspace = fs.readFileSync(new URL('../src/workspace-ui.js', import.meta.url), 'utf8');
 const responsive = fs.readFileSync(new URL('../src/agent-responsive-fix.js', import.meta.url), 'utf8');
+const realMacUi = fs.readFileSync(new URL('../src/real-mac-ui.js', import.meta.url), 'utf8');
 const bridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
 const explorerOps = fs.readFileSync(new URL('../electron/explorer-ops.cjs', import.meta.url), 'utf8');
 const acceptance = fs.readFileSync(new URL('../REAL_MAC_UI_ACCEPTANCE.md', import.meta.url), 'utf8');
@@ -71,6 +72,7 @@ test('misleading click affordances and old provider-DOM bridge actions are remov
   assert.match(responsive, /editorImportAiButton/);
   assert.match(responsive, /node\.remove\(\)/);
   assert.doesNotMatch(explorerOps, /Add (?:File|Folder) to Chat|choose\('add-chat'\)/);
+  assert.doesNotMatch(realMacUi, /Add (?:File|Folder) to Chat|addSelectionToChat|ensureProvider|api\.ai\.sendFile|data-real-action="add-chat"/);
 });
 
 test('real-Mac acceptance contract cannot re-authorize provider DOM automation', () => {
