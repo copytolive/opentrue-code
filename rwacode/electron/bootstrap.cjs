@@ -2,6 +2,7 @@
 
 const { app, session } = require('electron');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { installIpcGuard, installShellWindowGuard } = require('./ipc-guard.cjs');
 
@@ -36,6 +37,31 @@ async function flushBrowserState(){const sessions=storedProfileIds().map((id)=>s
 let flushInFlight=false;let flushComplete=false;
 app.on('before-quit',(event)=>{if(flushComplete)return;event.preventDefault();if(flushInFlight)return;flushInFlight=true;flushBrowserState().catch(()=>{}).finally(()=>{flushComplete=true;app.quit();});});
 for(const signalName of ['SIGINT','SIGTERM'])process.on(signalName,()=>{if(app.isReady())app.quit();else process.exit(0);});
+
+function installCiSmokeReadyMarker(){
+  if(process.env.RWACODE_CI_SMOKE!=='1')return;
+  const marker=String(process.env.RWACODE_SMOKE_READY_FILE||'').trim();
+  if(!marker||!path.isAbsolute(marker))return;
+  const tmpRoot=fs.realpathSync.native(os.tmpdir());
+  const markerParent=path.dirname(marker);
+  fs.mkdirSync(markerParent,{recursive:true});
+  let realParent;try{realParent=fs.realpathSync.native(markerParent);}catch{return;}
+  if(realParent!==tmpRoot&&!realParent.startsWith(`${tmpRoot}${path.sep}`))return;
+  app.on('browser-window-created',(_event,win)=>{
+    const writeReady=()=>{
+      try{
+        const url=win.webContents.getURL();
+        if(!url||!url.startsWith('file:')||!url.includes('index.html'))return;
+        const payload={pid:process.pid,version:app.getVersion(),url,readyAt:new Date().toISOString()};
+        const temp=`${marker}.${process.pid}.tmp`;
+        fs.writeFileSync(temp,`${JSON.stringify(payload)}\n`,{mode:0o600});
+        fs.renameSync(temp,marker);
+      }catch{}
+    };
+    win.webContents.once('did-finish-load',writeReady);
+  });
+}
+installCiSmokeReadyMarker();
 
 require('./agent-ipc.cjs');
 require('./explorer-ops.cjs');
