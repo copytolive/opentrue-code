@@ -7,6 +7,7 @@
   if (!filesPanel || !rightPanel) return;
 
   document.body.dataset.proShell = 'v2';
+  document.body.dataset.platform = /Macintosh|Mac OS X/i.test(navigator.userAgent) ? 'darwin' : 'other';
   if (!document.getElementById('professionalShellV21Style')) {
     const refinement = document.createElement('link');
     refinement.id = 'professionalShellV21Style';
@@ -142,6 +143,52 @@
     return { type: 'local' };
   }
 
+  function selectedSourceType() {
+    return String(document.getElementById('agentWorkspaceTag')?.value || 'local').toLowerCase();
+  }
+
+  function syncContextSourceSelection() {
+    const active = selectedSourceType();
+    for (const row of document.querySelectorAll('.pro-source-row')) {
+      const selected = row.dataset.source === active;
+      row.classList.toggle('selected', selected);
+      row.setAttribute('aria-pressed', String(selected));
+    }
+  }
+
+  function activateContextSource(type) {
+    if (!['local', 'github', 'googledrive'].includes(type)) return;
+    const tag = document.getElementById('agentWorkspaceTag');
+    const locator = document.getElementById('agentSourceLocator');
+    if (!tag) return;
+    tag.value = type;
+    tag.dispatchEvent(new Event('change', { bubbles:true }));
+    syncContextSourceSelection();
+    if (type !== 'local' && locator) {
+      locator.classList.remove('hidden');
+      locator.placeholder = type === 'github' ? 'owner/repository#branch' : '/Google Drive/path';
+      requestAnimationFrame(() => {
+        locator.focus();
+        if (!locator.value) locator.select();
+      });
+    }
+    refreshProfessionalStatus();
+  }
+
+  for (const row of document.querySelectorAll('.pro-source-row')) {
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.setAttribute('title', row.dataset.source === 'local' ? 'Use this local workspace' : row.dataset.source === 'github' ? 'Target a GitHub repository/branch' : 'Target a mounted Google Drive file or folder');
+    row.addEventListener('click', () => activateContextSource(row.dataset.source));
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activateContextSource(row.dataset.source);
+      }
+    });
+  }
+  syncContextSourceSelection();
+
   async function refreshProfessionalStatus() {
     if (!api?.agent?.status) return;
     try {
@@ -170,11 +217,15 @@
         if (meta) meta.textContent = 'Paste ChangeSet → Review → Apply';
         if (badge) badge.textContent = 'READY';
       }
+      syncContextSourceSelection();
     } catch {}
   }
 
   document.addEventListener('change', (event) => {
-    if (event.target?.id === 'agentWorkspaceTag' || event.target?.id === 'agentSourceLocator') refreshProfessionalStatus();
+    if (event.target?.id === 'agentWorkspaceTag' || event.target?.id === 'agentSourceLocator') {
+      syncContextSourceSelection();
+      refreshProfessionalStatus();
+    }
   });
   document.addEventListener('click', (event) => {
     if (event.target?.closest?.('#agentApplyButton,#agentUndoButton,#agentCommitButton,#agentPushButton,#agentDriveSyncButton')) {

@@ -148,6 +148,29 @@ body[data-pro-shell="v2"] .preview-surface{min-height:410px!important}
 body[data-pro-shell="v2"] .sync-card{box-shadow:0 10px 26px rgba(0,0,0,.10)!important}
 body[data-pro-shell="v2"] .sync-row{min-height:58px!important}
 
+/* V2.3 functional source cards + native macOS titlebar safety. */
+body[data-pro-shell="v2"][data-platform="darwin"] .traffic{display:none!important}
+body[data-pro-shell="v2"][data-platform="darwin"] .topbar{padding-left:86px!important}
+body[data-pro-shell="v2"] .pro-source-row{
+  cursor:pointer!important;
+  user-select:none;
+  outline:none;
+}
+body[data-pro-shell="v2"] .pro-source-row:hover{
+  border-color:#344354!important;
+  background:#151e29!important;
+}
+body[data-pro-shell="v2"] .pro-source-row:focus-visible{
+  border-color:#7658c9!important;
+  box-shadow:0 0 0 2px rgba(138,97,255,.20)!important;
+}
+body[data-pro-shell="v2"] .pro-source-row.selected{
+  border-color:#684bb0!important;
+  background:linear-gradient(180deg,#191a2d,#131827)!important;
+  box-shadow:inset 3px 0 0 #8a61ff,0 0 0 1px rgba(138,97,255,.07)!important;
+}
+body[data-pro-shell="v2"] .pro-source-row.selected .pro-source-copy b{color:#f1edff!important}
+
 @media (max-width:1450px){
   body[data-pro-shell="v2"] .workspace-grid{grid-template-columns:320px minmax(560px,1fr) 405px!important}
   body[data-pro-shell="v2"] .files-panel,body[data-pro-shell="v2"] .right-panel{padding:12px!important}
