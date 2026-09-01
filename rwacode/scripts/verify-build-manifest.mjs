@@ -10,7 +10,9 @@ const dist = path.join(root, 'dist');
 const repoRoot = path.resolve(root, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const manifestPath = path.join(dist, 'build-manifest.json');
+const sumsPath = path.join(dist, 'SHA256SUMS');
 if (!fs.existsSync(manifestPath)) throw new Error('build-manifest.json missing');
+if (!fs.existsSync(sumsPath)) throw new Error('SHA256SUMS missing');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const gitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
 
@@ -22,6 +24,7 @@ if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== 4) throw
 
 const required = new Set(['x86_64:dmg','x86_64:zip','arm64:dmg','arm64:zip']);
 const seen = new Set();
+const expectedSums = [];
 for (const artifact of manifest.artifacts) {
   const key = `${artifact.arch}:${artifact.kind}`;
   if (!required.has(key)) throw new Error(`unexpected artifact contract entry: ${key}`);
@@ -34,7 +37,11 @@ for (const artifact of manifest.artifacts) {
   if (stat.size !== artifact.size) throw new Error(`artifact size mismatch: ${artifact.file}`);
   const digest = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
   if (digest !== artifact.sha256) throw new Error(`artifact hash mismatch: ${artifact.file}`);
+  expectedSums.push(`${digest}  ${artifact.file}`);
 }
 for (const key of required) if (!seen.has(key)) throw new Error(`required artifact missing from manifest: ${key}`);
+
+const actualSums = fs.readFileSync(sumsPath, 'utf8').trim().split(/\r?\n/).filter(Boolean).sort();
+if (JSON.stringify(actualSums) !== JSON.stringify(expectedSums.sort())) throw new Error('SHA256SUMS does not exactly match build manifest');
 
 console.log(`RWACODE_ARTIFACT_CONTRACT=PASS version=${pkg.version} sha=${gitSha}`);
