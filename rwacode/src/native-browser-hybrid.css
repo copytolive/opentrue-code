@@ -1,0 +1,211 @@
+/*
+ * RWACode hybrid visual shell.
+ * Shell-only styling: the center provider surface remains the native Electron WebContents.
+ * No provider DOM, composer, conversation, cookie, session, or send behavior is touched here.
+ */
+:root{
+  --files-w:328px!important;
+  --right-w:392px!important;
+  --top-h:62px!important;
+  --tab-h:58px!important;
+  --toolbar-h:58px!important;
+  --hy-bg:#090b10;
+  --hy-panel:#0d1118;
+  --hy-panel-2:#111722;
+  --hy-panel-3:#151c28;
+  --hy-line:#242c38;
+  --hy-line-soft:#1b222d;
+  --hy-text:#f1f3f7;
+  --hy-muted:#8b94a4;
+  --hy-purple:#7c4dff;
+  --hy-purple-2:#9a6cff;
+  --hy-green:#57d59a;
+}
+
+html,body,.app-shell{background:var(--hy-bg)!important}
+body{color:var(--hy-text)!important}
+
+/* Top chrome: visually match the cleaner workbench reference. */
+.topbar{
+  height:var(--top-h)!important;
+  padding:0 16px!important;
+  gap:14px!important;
+  background:linear-gradient(180deg,#0c0f15 0%,#090c12 100%)!important;
+  border-bottom:1px solid var(--hy-line)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.015)!important;
+}
+.traffic{gap:8px!important}
+.traffic span{width:12px!important;height:12px!important}
+.brand{gap:10px!important;font-size:18px!important;letter-spacing:-.02em!important}
+.brand strong{font-weight:760!important}
+.brand-mark{
+  width:34px!important;height:34px!important;border-radius:9px!important;
+  border:1px solid rgba(143,105,255,.7)!important;
+  background:linear-gradient(145deg,#7747ef,#34276b)!important;
+  box-shadow:0 0 24px rgba(124,77,255,.16),inset 0 1px rgba(255,255,255,.12)!important;
+}
+.brand-mark span{color:#fff!important;font-size:10px!important}
+.workspace-chip{
+  height:36px!important;max-width:280px!important;padding:0 14px!important;
+  border-radius:11px!important;border:1px solid #283140!important;
+  background:#10151d!important;color:#c7ced8!important;font-size:12px!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02)!important;
+}
+.security-chip{
+  height:36px!important;border-radius:18px!important;padding:0 14px!important;
+  border:1px solid rgba(87,213,154,.3)!important;background:rgba(16,58,43,.55)!important;
+  color:#9be9c1!important;font-size:11px!important;
+}
+
+/* Three-surface workbench. */
+.workspace-grid{
+  grid-template-columns:var(--files-w) minmax(600px,1fr) var(--right-w)!important;
+  background:var(--hy-bg)!important;
+}
+.files-panel,.right-panel{
+  background:linear-gradient(180deg,#0c1017 0%,#090d13 100%)!important;
+  border-color:var(--hy-line)!important;
+}
+.files-panel{border-right:1px solid var(--hy-line)!important}
+.right-panel{border-left:1px solid var(--hy-line)!important}
+
+/* Explorer: same visual family as the previous modern shell, but all existing handlers remain intact. */
+.files-head{
+  height:58px!important;padding:0 16px!important;
+  border-bottom:1px solid var(--hy-line)!important;background:#0d1118!important;
+}
+.files-head b{font-size:13px!important;font-weight:680!important;color:#f2f4f7!important}
+.files-head .icon-button{width:30px!important;height:30px!important;border-radius:7px!important;color:#9099a8!important}
+.files-head .icon-button:hover{background:#171e29!important;color:#fff!important}
+.root-lock{
+  margin:14px 14px 10px!important;padding:14px 14px 15px!important;border-radius:12px!important;
+  border:1px solid #2b3442!important;background:linear-gradient(145deg,#121923,#0e141d)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.1),inset 0 1px rgba(255,255,255,.02)!important;
+}
+.root-lock strong{font-size:9px!important;letter-spacing:.08em!important;color:#c9d0da!important}
+.root-lock-copy{font-size:10px!important;color:#b8c0cb!important}
+.root-lock-icon{color:var(--hy-green)!important}
+.file-search{padding:0 14px 9px!important}
+.file-search input{height:34px!important;border-radius:8px!important;border-color:#2a3341!important;background:#0b1017!important}
+.file-tree{padding:4px 8px 16px 12px!important}
+.file-row{height:31px!important;border-radius:7px!important;font-size:11px!important;color:#b4bdc9!important}
+.file-row:hover{background:#151c26!important;color:#f2f4f8!important}
+.file-row.selected{
+  background:linear-gradient(90deg,rgba(124,77,255,.23),rgba(124,77,255,.08))!important;
+  border-color:rgba(154,108,255,.38)!important;color:#fff!important;
+}
+.explorer-foot{height:46px!important;border-top:1px solid var(--hy-line)!important;background:#0c1017!important}
+
+/* Center: keep the real provider WebContents. Only shell chrome around it is restyled. */
+.browser-panel{
+  background:#080b10!important;border-right:0!important;
+  grid-template-rows:var(--tab-h) var(--toolbar-h) auto minmax(0,1fr)!important;
+}
+.tab-strip{
+  height:var(--tab-h)!important;padding:9px 12px 0!important;gap:6px!important;
+  background:#0b0f15!important;border-bottom:1px solid var(--hy-line)!important;
+}
+.tab{
+  height:49px!important;min-width:200px!important;max-width:290px!important;
+  border-radius:11px 11px 0 0!important;color:#929baa!important;
+}
+.tab.active{
+  background:linear-gradient(180deg,#151b25,#10151d)!important;
+  border-color:#2b3442!important;color:#f5f7fa!important;
+  box-shadow:inset 0 2px 0 rgba(124,77,255,.48)!important;
+}
+.tab-plus{width:38px!important;height:38px!important;border-radius:8px!important;color:#9ba4b3!important}
+.tab-plus:hover{background:#171e29!important;color:#fff!important}
+.browser-toolbar{
+  height:var(--toolbar-h)!important;padding:8px 12px!important;gap:6px!important;
+  background:#0d1118!important;border-bottom:1px solid var(--hy-line)!important;
+}
+.nav-button{width:36px!important;height:36px!important;border-radius:8px!important;color:#9ba4b3!important}
+.nav-button:hover{background:#171e29!important;color:#fff!important}
+.address-input{
+  height:40px!important;border-radius:11px!important;border:1px solid #303947!important;
+  background:#090d13!important;color:#e8ebf0!important;font-size:12px!important;
+}
+.address-input:focus{border-color:#6e55d7!important;box-shadow:0 0 0 2px rgba(124,77,255,.12)!important}
+.browser-surface{background:#050608!important}
+
+/* Workspace Agent remains a separate shell control, visually integrated instead of replacing provider chat. */
+.rw-agent{
+  padding:8px 12px 9px!important;gap:7px!important;z-index:20!important;
+  background:linear-gradient(180deg,#0f141c,#0c1118)!important;
+  border-bottom:1px solid var(--hy-line)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.015)!important;
+}
+.rw-agent-row{gap:8px!important;flex-wrap:wrap!important}
+.rw-agent-source,.rw-agent-locator,.rw-agent-input,.rw-agent-mode,.rw-agent-button,.rw-agent-small-input{
+  height:36px!important;border-radius:9px!important;border:1px solid #303948!important;
+  background:#0a0f16!important;color:#dce1e8!important;
+}
+.rw-agent-source{
+  border-color:rgba(87,213,154,.35)!important;background:#10281f!important;color:#9fe8c3!important;
+  font-weight:720!important;
+}
+.rw-agent-input{min-width:240px!important}
+.rw-agent-input:focus,.rw-agent-locator:focus,.rw-agent-small-input:focus{
+  border-color:#7356de!important;box-shadow:0 0 0 2px rgba(124,77,255,.1)!important;
+}
+.rw-agent-button.primary{
+  border-color:#7556de!important;background:linear-gradient(180deg,#6f49dd,#5a38c1)!important;color:#fff!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.08)!important;
+}
+.rw-agent-button:not(.primary):hover{background:#171e29!important;color:#fff!important}
+.rw-agent-meta{font-size:10px!important;color:#8d96a5!important}
+.rw-agent-diff{border-color:#2b3442!important;background:#080b10!important;color:#c9d0da!important}
+.rw-agent-review-head,.rw-agent-git-actions,.rw-agent-drive-actions{color:#9aa3b1!important}
+
+/* Right tools: same visual language as the previous reference, no fake tabs are added. */
+.preview-panel{grid-template-rows:58px minmax(0,1fr)!important}
+.preview-head{height:58px!important;padding:0 14px!important;background:#0d1118!important;border-bottom:1px solid var(--hy-line)!important}
+.preview-tabs{gap:20px!important}
+.preview-tab{height:57px!important;color:#969fad!important;font-size:12px!important}
+.preview-tab.active{color:#fff!important;border-bottom-color:var(--hy-purple-2)!important}
+.preview-content{padding:0 12px 12px!important;grid-template-rows:52px 50px minmax(250px,1fr) 214px!important}
+.preview-toolbar{height:52px!important;padding:8px 0 4px!important}
+.preview-toolbar input{
+  height:38px!important;border-radius:9px!important;border-color:#303947!important;background:#090d13!important;color:#e7eaf0!important;
+}
+.preview-toolbar button{
+  height:38px!important;border-radius:9px!important;border-color:#7254da!important;
+  background:linear-gradient(180deg,#251d3f,#19142d)!important;color:#f4f0ff!important;
+}
+.preview-devicebar{height:50px!important}
+.device-group{height:38px!important;border-color:#303947!important;border-radius:9px!important}
+.device-button{height:36px!important;border-color:#303947!important;background:#0c1118!important;color:#929cab!important}
+.device-button.active{background:#221b38!important;color:#bba7ff!important;box-shadow:inset 0 0 0 1px #684fd0!important}
+.preview-icon{border-radius:8px!important;color:#9ba4b3!important}
+.preview-icon:hover{background:#171e29!important;color:#fff!important}
+.preview-surface{
+  border-radius:11px!important;border-color:#374151!important;
+  background:linear-gradient(145deg,#111722,#0b1017)!important;
+}
+.preview-placeholder{
+  background:radial-gradient(320px 210px at 50% 46%,rgba(124,77,255,.08),transparent 70%),linear-gradient(145deg,#121824,#0b1017)!important;
+}
+.preview-placeholder-icon{border-color:#626d7d!important;color:#8f9aad!important}
+.sync-card{border-radius:11px!important;border-color:#2b3442!important;background:linear-gradient(180deg,#101720,#0c121a)!important}
+.sync-card h3,.sync-row{border-color:#242c38!important}
+.sync-icon.good{border-color:#315844!important;background:#11271e!important;color:#6fe3a3!important}
+.inspector-content{background:#0c1017!important}
+.inspector-card{border-color:#242c38!important}
+
+/* Keep every visible shell control above decorative surfaces; never cover the native provider WebContents with fake chat UI. */
+.topbar,.files-panel,.right-panel,.tab-strip,.browser-toolbar,.rw-agent{position:relative!important;pointer-events:auto!important}
+#browserSurface{position:relative!important;z-index:1!important}
+#chatFirstRoot{display:none!important;pointer-events:none!important}
+
+/* Compact fallback without changing any behavior. */
+@media(max-width:1450px){
+  :root{--files-w:300px!important;--right-w:350px!important}
+  .workspace-grid{grid-template-columns:var(--files-w) minmax(520px,1fr) var(--right-w)!important}
+  .rw-agent-input{min-width:200px!important}
+}
+@media(max-width:1180px){
+  :root{--files-w:260px!important;--right-w:310px!important}
+  .workspace-grid{grid-template-columns:var(--files-w) minmax(460px,1fr) var(--right-w)!important}
+  .workspace-chip{max-width:190px!important}
+}
