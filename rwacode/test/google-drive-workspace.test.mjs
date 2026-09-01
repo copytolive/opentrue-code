@@ -19,13 +19,11 @@ test('Google Drive mirror stays local until explicit sync, then Undo restores mi
   const sourceFile = path.join(sourceFolder, 'RWACODE_GOOGLE_DRIVE_AGENT_E2E.txt');
   const before = fixtureBytes(12345);
   fs.writeFileSync(sourceFile, before);
-
   const manager = createGoogleDriveWorkspaceManager({ stateRoot:temp('rwacode-drive-state-'), driveRoots:[driveRoot] });
   const mounted = await manager.mount({ locator:sourceFolder });
   assert.equal(mounted.adapter.type, 'googledrive');
   assert.equal(mounted.adapter.capabilities.syncBack, true);
   assert.equal(mounted.adapter.capabilities.nativeGoogleWorkspaceFiles, false);
-
   const agent = createWorkspaceAgent({ adapter:mounted.adapter });
   const planned = await agent.plan('RWACODEDRIVEVALUE menjadi 22222');
   assert.equal(planned.status, 'PREPARED');
@@ -33,15 +31,12 @@ test('Google Drive mirror stays local until explicit sync, then Undo restores mi
   assert.match(planned.diff, /-RWACODEDRIVEVALUE=12345/);
   assert.match(planned.diff, /\+RWACODEDRIVEVALUE=22222/);
   assert.deepEqual(fs.readFileSync(sourceFile), before, 'Drive source must not change before Apply or explicit Sync');
-
   const applied = await agent.apply(planned.id);
   assert.match(fs.readFileSync(path.join(mounted.mirrorRoot, 'RWACODE_GOOGLE_DRIVE_AGENT_E2E.txt'), 'utf8'), /22222/);
   assert.deepEqual(fs.readFileSync(sourceFile), before, 'Apply edits only managed mirror');
-
   const synced = await agent.explicitDriveAction('sync', {}, applied.id);
   assert.equal(synced.synced, true);
   assert.match(fs.readFileSync(sourceFile, 'utf8'), /RWACODEDRIVEVALUE=22222/);
-
   const undone = await agent.undo(applied.id);
   assert.equal(undone.status, 'UNDONE');
   assert.deepEqual(fs.readFileSync(sourceFile), before, 'Undo must restore exact Drive BEFORE bytes after explicit sync');
@@ -86,9 +81,10 @@ test('Google Drive native Workspace stubs are not misrepresented as editable loc
 
 test('Google Drive locator is root scoped and rejects paths outside mounted Drive roots', async () => {
   const driveRoot = temp('rwacode-drive-scope-root-');
+  const canonicalRoot = fs.realpathSync(driveRoot);
   const outside = temp('rwacode-drive-outside-');
-  await assert.rejects(resolveDriveLocator(outside, [driveRoot]), /not found inside/);
+  await assert.rejects(resolveDriveLocator(outside, [canonicalRoot]), /not found inside/);
   const inside = path.join(driveRoot, 'project');
   fs.mkdirSync(inside);
-  assert.equal(await resolveDriveLocator(inside, [driveRoot]), fs.realpathSync(inside));
+  assert.equal(await resolveDriveLocator(inside, [canonicalRoot]), fs.realpathSync(inside));
 });
