@@ -48,7 +48,7 @@ REMOTE_MAIN="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
 test "$SHA" = "$REMOTE_MAIN"
 VERSION="$(node -p "require('./rwacode/package.json').version")"
 SHORT="${SHA:0:12}"
-TAG="rwacode-v${VERSION}-build-${SHORT}"
+TAG="${RWACODE_RELEASE_TAG:-rwacode-v${VERSION}-build-${SHORT}}"
 
 for _ in $(seq 1 36); do
   if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then break; fi
