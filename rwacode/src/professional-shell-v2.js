@@ -7,6 +7,13 @@
   if (!filesPanel || !rightPanel) return;
 
   document.body.dataset.proShell = 'v2';
+  if (!document.getElementById('professionalShellV21Style')) {
+    const refinement = document.createElement('link');
+    refinement.id = 'professionalShellV21Style';
+    refinement.rel = 'stylesheet';
+    refinement.href = './professional-shell-v21.css';
+    document.head.appendChild(refinement);
+  }
 
   // Provider-neutral browser home. RWACode does not enumerate, automate, or
   // integrate specific AI providers; the user opens any web chat manually.
