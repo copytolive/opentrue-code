@@ -20,7 +20,7 @@ const secretNames = [
 
 test('Apple distribution installer sends all secret values through stdin', () => {
   for (const name of secretNames) {
-    assert.match(installer, new RegExp(`gh secret set ${name} --repo \\"\\$REPO\\"`));
+    assert.ok(installer.includes(`gh secret set ${name} --repo "$REPO"`), `missing stdin secret write for ${name}`);
   }
   assert.doesNotMatch(installer, /gh secret set[^\n]*--body\s+-/);
   assert.match(installer, /SECRET_VALUES_PRINTED=NO/);
