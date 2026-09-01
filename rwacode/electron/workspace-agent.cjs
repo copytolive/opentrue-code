@@ -7,20 +7,36 @@ const { createWorkspaceRetriever } = require('./workspace-retriever.cjs');
 const { createAgentRunner } = require('./agent-runner.cjs');
 const { createTransactionEngine } = require('./transaction-engine.cjs');
 
-function createWorkspaceAgent({ root, journalPath = null, onWorkspaceChanged = null, projectContext = null } = {}) {
-  const adapter = createLocalWorkspaceAdapter({ root });
-  const context = projectContext || createWorkspaceRetriever({ root:adapter.root });
-  const runner = createAgentRunner({ root:adapter.root, projectContext:context, adapter });
+function createWorkspaceAgent({ root = null, adapter = null, journalPath = null, onWorkspaceChanged = null, projectContext = null } = {}) {
+  const workspaceAdapter = adapter || createLocalWorkspaceAdapter({ root });
+  const context = projectContext || createWorkspaceRetriever({ root:workspaceAdapter.root });
+  const runner = createAgentRunner({ root:workspaceAdapter.root, projectContext:context, adapter:workspaceAdapter });
   let activePreparedId = null;
+  let lastSourceState = null;
 
   async function journal(entry) {
     if (!journalPath) return;
     await fsp.mkdir(path.dirname(journalPath), { recursive:true });
     await fsp.appendFile(journalPath, JSON.stringify(entry) + '\n', { encoding:'utf8', mode:0o600 });
   }
-  const transactions = createTransactionEngine({ adapter, journal, onApplied:async (tx) => {
+
+  async function readSourceState() {
+    if (typeof workspaceAdapter.sourceState !== 'function') return null;
+    lastSourceState = await workspaceAdapter.sourceState();
+    return lastSourceState;
+  }
+
+  async function enrich(tx) {
+    return {
+      ...tx,
+      workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, capabilities:workspaceAdapter.capabilities, source:workspaceAdapter.source || null },
+      sourceState:await readSourceState(),
+    };
+  }
+
+  const transactions = createTransactionEngine({ adapter:workspaceAdapter, journal, onApplied:async (tx) => {
     context.invalidate();
-    if (onWorkspaceChanged) await onWorkspaceChanged(tx);
+    if (onWorkspaceChanged) await onWorkspaceChanged(await enrich(tx));
   }});
 
   async function plan(task, { mode = 'normal' } = {}) {
@@ -30,20 +46,43 @@ function createWorkspaceAgent({ root, journalPath = null, onWorkspaceChanged = n
     if (String(mode).toLowerCase() === 'auto') {
       const applied = await transactions.apply(tx.id);
       activePreparedId = null;
-      return { ...applied, runnerAvailability:runner.availability(), evidence:result.evidence || null };
+      return { ...(await enrich(applied)), runnerAvailability:runner.availability(), evidence:result.evidence || null };
     }
-    return { ...tx, runnerAvailability:runner.availability(), evidence:result.evidence || null };
+    return { ...(await enrich(tx)), runnerAvailability:runner.availability(), evidence:result.evidence || null };
   }
+
   async function apply(id = activePreparedId) {
     if (!id) throw new Error('no prepared transaction');
     const tx = await transactions.apply(id);
     if (activePreparedId === id) activePreparedId = null;
-    return tx;
+    return enrich(tx);
   }
-  async function undo(id) { return transactions.undo(id); }
-  function status() { return { workspace:{ id:adapter.id, type:adapter.type, root:adapter.root, capabilities:adapter.capabilities }, runners:runner.availability(), transaction:transactions.status(), activePreparedId }; }
+
+  async function undo(id) {
+    return enrich(await transactions.undo(id));
+  }
+
+  async function explicitGitAction(action, payload = {}, transactionId = null) {
+    if (workspaceAdapter.type !== 'github') throw new Error('GitHub action requires an @GitHub workspace');
+    const tx = transactionId ? transactions.getPublic?.(transactionId) : null;
+    const paths = tx?.touched || transactions.status().lastTransaction?.touched || [];
+    if (action === 'commit') return workspaceAdapter.commit({ message:payload.message, paths });
+    if (action === 'push') return workspaceAdapter.push();
+    if (action === 'pr') return workspaceAdapter.createPullRequest({ title:payload.title, body:payload.body });
+    throw new Error('unsupported explicit GitHub action');
+  }
+
+  function status() {
+    return {
+      workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, capabilities:workspaceAdapter.capabilities, source:workspaceAdapter.source || null },
+      runners:runner.availability(),
+      transaction:transactions.status(),
+      sourceState:lastSourceState,
+      activePreparedId,
+    };
+  }
   function invalidate() { context.invalidate(); }
-  return { plan, apply, undo, status, invalidate, adapter };
+  return { plan, apply, undo, status, invalidate, adapter:workspaceAdapter, explicitGitAction };
 }
 
 module.exports = { createWorkspaceAgent };
