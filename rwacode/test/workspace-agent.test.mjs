@@ -23,7 +23,6 @@ test('natural task locates VALUE assignment, edits real disk, and undo restores 
   fs.writeFileSync(target, before);
   fs.mkdirSync(path.join(workspace, 'src'));
   fs.writeFileSync(path.join(workspace, 'src', 'unrelated.js'), 'const other = 1;\n');
-
   const agent = createWorkspaceAgent({ root:workspace, journalPath:path.join(workspace, '.rwacode', 'transactions.jsonl') });
   const planned = await agent.plan('ubah VALUE menjadi 22222');
   assert.equal(planned.status, 'PREPARED');
@@ -32,12 +31,10 @@ test('natural task locates VALUE assignment, edits real disk, and undo restores 
   assert.match(planned.diff, /-VALUE=12345/);
   assert.match(planned.diff, /\+VALUE=22222/);
   assert.deepEqual(fs.readFileSync(target), before, 'Normal mode must not write before Apply');
-
   const applied = await agent.apply(planned.id);
   assert.equal(applied.status, 'APPLIED');
   assert.match(fs.readFileSync(target, 'utf8'), /VALUE=22222/);
   assert.equal(agent.status().transaction.undoAvailable, true);
-
   const undone = await agent.undo(applied.id);
   assert.equal(undone.status, 'UNDONE');
   assert.deepEqual(fs.readFileSync(target), before);
@@ -49,13 +46,12 @@ test('safe Indonesian literal shorthand without an explicit verb is accepted', (
   assert.equal(parseLiteralTask('tolong ubah sesuatu'), null);
 });
 
-test('free-form task uses official Codex as isolated read-only context planner, then Transaction Engine owns writes and exact Undo', async () => {
+test('free-form task uses official OpenAI CLI as isolated read-only context planner, then Transaction Engine owns writes and exact Undo', async () => {
   const workspace = root();
   const planningTemp = root();
   const target = path.join(workspace, 'index.html');
   const before = Buffer.from('<!doctype html>\n<button id="old">Old</button>\n');
   fs.writeFileSync(target, before);
-
   const adapter = createLocalWorkspaceAdapter({ root:workspace });
   const retriever = createWorkspaceRetriever({ root:workspace });
   const calls = [];
@@ -69,33 +65,20 @@ test('free-form task uses official Codex as isolated read-only context planner, 
     const schemaIndex = args.indexOf('--output-schema');
     assert.ok(schemaIndex > 0);
     assert.ok(fs.existsSync(args[schemaIndex + 1]));
-    assert.notEqual(path.resolve(options.cwd), path.resolve(workspace), 'Codex planning cwd must not be the project root');
+    assert.notEqual(path.resolve(options.cwd), path.resolve(workspace), 'planning cwd must not be the project root');
     const prompt = args.at(-1);
     assert.match(prompt, /RWACODE PROJECT CONTEXT/);
     assert.match(prompt, /index\.html/);
     assert.match(prompt, /tambahkan tombol Full Screen/i);
     assert.match(prompt, /Do not edit files/);
-    return {
-      stdout:JSON.stringify({
-        version:1,
-        summary:'Add a fullscreen button',
-        operations:[{
-          type:'MODIFY',
-          path:'index.html',
-          content:'<!doctype html>\n<button id="old">Old</button>\n<button id="fullscreen">Full Screen</button>\n',
-        }],
-      }),
-      stderr:'',
-    };
+    return { stdout:JSON.stringify({ version:1, summary:'Add a fullscreen button', operations:[{ type:'MODIFY', path:'index.html', content:'<!doctype html>\n<button id="old">Old</button>\n<button id="fullscreen">Full Screen</button>\n' }] }), stderr:'' };
   };
-
   const runner = createAgentRunner({ root:workspace, projectContext:retriever, adapter, executableFinder, processRunner, tempRoot:planningTemp });
   const planned = await runner.plan('tambahkan tombol Full Screen yang benar-benar berfungsi tanpa merusak halaman');
-  assert.equal(planned.runner, 'codex');
+  assert.equal(planned.runner, 'openai-official-cli');
   assert.deepEqual(fs.readFileSync(target), before, 'planning must never mutate the workspace');
   assert.equal(calls.length, 1);
   assert.match(planned.changeSet.summary, /fullscreen/i);
-
   const tx = createTransactionEngine({ adapter });
   const prepared = await tx.prepare(planned.changeSet);
   assert.match(prepared.diff, /\+<button id="fullscreen">Full Screen<\/button>/);
@@ -113,10 +96,7 @@ test('bounded index includes root files before deep directory contents can exhau
   fs.writeFileSync(target, 'RWACODE_REAL_MAC_E2E\nRWACODEVALUE=12345\n');
   const crowded = path.join(workspace, '00_CROWDED');
   fs.mkdirSync(crowded);
-  for (let index = 0; index < 2610; index += 1) {
-    fs.writeFileSync(path.join(crowded, `f-${String(index).padStart(4, '0')}.txt`), `FILLER_${index}=1\n`);
-  }
-
+  for (let index = 0; index < 2610; index += 1) fs.writeFileSync(path.join(crowded, `f-${String(index).padStart(4, '0')}.txt`), `FILLER_${index}=1\n`);
   const agent = createWorkspaceAgent({ root:workspace });
   const planned = await agent.plan('ubah RWACODEVALUE menjadi 22222');
   assert.equal(planned.status, 'PREPARED');
@@ -144,10 +124,7 @@ test('multi-file transaction restores every BEFORE state', async () => {
   fs.writeFileSync(path.join(workspace, 'b.txt'), 'B=1\n');
   const adapter = createLocalWorkspaceAdapter({ root:workspace });
   const tx = createTransactionEngine({ adapter });
-  const prepared = await tx.prepare({ version:1, summary:'two files', operations:[
-    { type:'MODIFY', path:'a.txt', content:'A=2\n' },
-    { type:'MODIFY', path:'b.txt', content:'B=2\n' },
-  ]});
+  const prepared = await tx.prepare({ version:1, summary:'two files', operations:[{ type:'MODIFY', path:'a.txt', content:'A=2\n' },{ type:'MODIFY', path:'b.txt', content:'B=2\n' }]});
   await tx.apply(prepared.id);
   assert.equal(fs.readFileSync(path.join(workspace, 'a.txt'), 'utf8'), 'A=2\n');
   assert.equal(fs.readFileSync(path.join(workspace, 'b.txt'), 'utf8'), 'B=2\n');
