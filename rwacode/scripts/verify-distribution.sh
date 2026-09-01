@@ -7,6 +7,7 @@ need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: required command missi
 need codesign
 need spctl
 need xcrun
+need git
 
 apps=(
   "dist/mac/RWACode.app"
@@ -32,4 +33,15 @@ for dmg in dist/*.dmg; do
   echo "RWACODE_STAPLED_DMG=PASS dmg=$dmg"
 done
 
+COMMIT="$(git -C .. rev-parse HEAD)"
+cat > dist/DISTRIBUTION_ATTESTATION.txt <<EOF
+RWACODE_DISTRIBUTION_SIGNATURES=PASS
+COMMIT=$COMMIT
+APPLE_TEAM_ID=${APPLE_TEAM_ID:-verified-from-signature}
+DEVELOPER_ID_APPLICATION=PASS
+NOTARIZATION_STAPLED=PASS
+GATEKEEPER_ASSESSMENT=PASS
+EOF
+
 echo "RWACODE_DISTRIBUTION_SIGNATURES=PASS"
+echo "RWACODE_DISTRIBUTION_ATTESTATION=dist/DISTRIBUTION_ATTESTATION.txt"
