@@ -9,11 +9,13 @@ const root = path.resolve(here, '..');
 const index = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
 const shell = fs.readFileSync(path.join(root, 'src', 'professional-shell-v2.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'src', 'professional-shell-v2.css'), 'utf8');
+const css21 = fs.readFileSync(path.join(root, 'src', 'professional-shell-v21.css'), 'utf8');
 const agent = fs.readFileSync(path.join(root, 'src', 'agent-ui.js'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('professional shell assets are loaded and syntax checked', () => {
   assert.match(index, /professional-shell-v2\.css/);
+  assert.match(index, /professional-shell-v21\.css/);
   assert.match(index, /professional-shell-v2\.js/);
   assert.match(pkg.scripts.check, /node --check src\/professional-shell-v2\.js/);
 });
@@ -29,6 +31,17 @@ test('professional shell exposes exactly the three approved workspace context so
   assert.doesNotMatch(agent, /<option value="server">/i);
 });
 
+test('browser home is provider neutral from first paint', () => {
+  assert.match(index, /class="browser-chat-home"/);
+  assert.match(index, />Browser Chat<\/h1>/);
+  assert.match(index, /Human-controlled · NO_AI_API/);
+  assert.doesNotMatch(index, /data-url="https:\/\/(?:chatgpt\.com|claude\.ai|gemini\.google\.com)"/i);
+  assert.doesNotMatch(index, /<b>(?:ChatGPT|Claude|Gemini)<\/b>/i);
+  assert.match(index, /<span>Browser<\/span><b>Native web chat<\/b>/);
+  assert.match(shell, /Provider-neutral browser home/);
+  assert.doesNotMatch(shell, /chatgpt\.com|claude\.ai|gemini\.google\.com/i);
+});
+
 test('visual shell keeps the real two-tab preview contract and does not add decorative dead tabs', () => {
   assert.match(index, /id="previewTabButton"[^>]*>Preview<\/button>/);
   assert.match(index, /id="inspectorTabButton"[^>]*>Inspector<\/button>/);
@@ -39,7 +52,8 @@ test('visual shell keeps the real two-tab preview contract and does not add deco
 test('professional shell establishes card-based left and right rails without replacing core workbench', () => {
   assert.match(css, /\.pro-sidebar-card/);
   assert.match(css, /\.preview-panel/);
-  assert.match(css, /grid-template-columns:320px minmax\(580px,1fr\) 390px/);
+  assert.match(css21, /grid-template-columns:344px minmax\(620px,1fr\) 440px/);
+  assert.match(css21, /\.browser-chat-home/);
   assert.match(shell, /filesPanel\.replaceChildren\(workspaceCard, explorerCard, sources, recent, foot\)/);
   assert.match(index, /id="browserSurface"/);
   assert.match(index, /id="agentWorkspaceTag"|agent-ui\.js/);

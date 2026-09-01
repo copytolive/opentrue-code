@@ -7,6 +7,32 @@
   if (!filesPanel || !rightPanel) return;
 
   document.body.dataset.proShell = 'v2';
+  if (!document.getElementById('professionalShellV21Style')) {
+    const refinement = document.createElement('link');
+    refinement.id = 'professionalShellV21Style';
+    refinement.rel = 'stylesheet';
+    refinement.href = './professional-shell-v21.css';
+    document.head.appendChild(refinement);
+  }
+
+  // Provider-neutral browser home. RWACode does not enumerate, automate, or
+  // integrate specific AI providers; the user opens any web chat manually.
+  const newTabPage = document.getElementById('newTabPage');
+  if (newTabPage) {
+    newTabPage.innerHTML = `
+      <section class="browser-chat-home" aria-label="Provider-neutral browser chat">
+        <div class="browser-chat-mark" aria-hidden="true">R//</div>
+        <h1>Browser Chat</h1>
+        <p>Open any AI or conversational website from the address bar above. Sign in, type, send, and copy responses manually like a normal browser.</p>
+        <div class="browser-chat-hint"><span class="browser-chat-kbd">⌘L</span><span>focus address bar · enter any HTTPS web chat URL</span></div>
+        <div class="browser-chat-safety">Human-controlled · NO_AI_API · no automated send or response scraping</div>
+      </section>`;
+  }
+  for (const card of document.querySelectorAll('.inspector-card')) {
+    const key = card.querySelector('span')?.textContent?.trim();
+    const value = card.querySelector('b');
+    if (key === 'Browser' && value) value.textContent = 'Native web chat';
+  }
 
   const topbar = document.querySelector('.topbar');
   const workspaceChip = document.getElementById('workspaceChip');
