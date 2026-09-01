@@ -33,6 +33,7 @@ const SENSITIVE_BASENAMES = new Set([
   'service-account.json','service_account.json','id_rsa','id_ed25519','known_hosts',
 ]);
 const SENSITIVE_PATH_RE = /(^|\/)(?:\.env(?:\..*)?|\.ssh(?:\/|$)|\.aws(?:\/|$)|\.config\/gcloud(?:\/|$)|secrets?(?:\.|\/|$)|credentials?(?:\.|\/|$)|auth(?:\.|\/|$)|tokens?(?:\.|\/|$)|.*\.(?:pem|key|p12|pfx|jks|keystore))$/i;
+const FULL_LINE_SECRET_RE = /^(\s*(?:(?:proxy-)?authorization|cookie|set-cookie)\s*[:=])\s*[^\r\n]*/gim;
 const SECRET_ASSIGNMENT_RE = /(api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|password|passwd|pwd|token|bearer|authorization|client[_-]?secret|private[_-]?key|refresh[_-]?token|session[_-]?key|cookie)\s*([:=])\s*([^\s,;#]+)/ig;
 
 function extensionOf(name = '') {
@@ -48,6 +49,7 @@ function isSensitivePath(value = '') {
 function redactSensitiveText(input = '') {
   let text = String(input || '');
   text = text.replace(/-----BEGIN [^-]*(?:PRIVATE KEY|OPENSSH PRIVATE KEY)-----[\s\S]*?-----END [^-]*(?:PRIVATE KEY|OPENSSH PRIVATE KEY)-----/gi, '[REDACTED PRIVATE KEY]');
+  text = text.replace(FULL_LINE_SECRET_RE, (_m, prefix) => `${prefix}[REDACTED]`);
   text = text.replace(SECRET_ASSIGNMENT_RE, (_m, key, sep) => `${key}${sep}[REDACTED]`);
   text = text.replace(/\b(?:sk|pk|rk|ghp|github_pat|xox[baprs]|AIza)[A-Za-z0-9_\-]{16,}\b/g, '[REDACTED TOKEN]');
   return text;
