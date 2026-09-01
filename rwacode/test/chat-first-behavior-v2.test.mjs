@@ -34,17 +34,17 @@ test('root-locked adapter browsing hides .git and symlinks',async()=>{
 test('Workspace Agent owns task Enter while native provider pages remain untouched',()=>{
   assert.match(agentUi,/id=\"agentTaskInput\"/);
   assert.match(agentUi,/agentTaskInput'\)\.addEventListener\('keydown'/);
-  assert.match(agentUi,/event\.key === 'Enter'/);
-  assert.match(agentUi,/event\.preventDefault\(\); runTask\(\)/);
+  assert.match(agentUi,/event\.key\s*===\s*['"]Enter['"]/);
+  assert.match(agentUi,/event\.preventDefault\(\);\s*runTask\(\)/);
   assert.doesNotMatch(main,/executeJavaScript|MutationObserver|prompt-textarea|send-button/);
   assert.doesNotMatch(explorer,/executeJavaScript|MutationObserver|prompt-textarea|send-button/);
 });
 
 test('native browser surface stays isolated from privileged shell IPC',()=>{
   assert.match(main,/new WebContentsView/);
-  assert.match(main,/sandbox: true/);
-  assert.match(main,/contextIsolation: true/);
-  assert.match(main,/nodeIntegration: false/);
+  assert.match(main,/sandbox\s*:\s*true/);
+  assert.match(main,/contextIsolation\s*:\s*true/);
+  assert.match(main,/nodeIntegration\s*:\s*false/);
   assert.match(preload,/contextBridge\.exposeInMainWorld\('rwacode'/);
   assert.doesNotMatch(preload,/\bai\s*:\s*\{/);
 });
