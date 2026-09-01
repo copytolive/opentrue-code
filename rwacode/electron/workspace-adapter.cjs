@@ -13,6 +13,12 @@ function normalizeRelative(value) {
   if (!raw || raw === '.' || raw.startsWith('/') || raw.split('/').includes('..')) throw new Error('invalid workspace-relative path');
   return raw.replace(/^\.\//, '');
 }
+function normalizeDirectoryRelative(value) {
+  const raw = String(value == null ? '.' : value).trim().replace(/\\/g, '/');
+  if (!raw || raw === '.') return '.';
+  if (raw.startsWith('/') || raw.split('/').includes('..')) throw new Error('invalid workspace-relative directory');
+  return raw.replace(/^\.\//, '').replace(/\/$/, '') || '.';
+}
 function digest(buffer) { return crypto.createHash('sha256').update(buffer).digest('hex'); }
 
 function createLocalWorkspaceAdapter({ root }) {
@@ -25,6 +31,34 @@ function createLocalWorkspaceAdapter({ root }) {
     const candidate = path.join(parent, path.basename(rel));
     if (candidate !== guard.root && !candidate.startsWith(guard.root + path.sep)) throw new Error('path escapes canonical root');
     return { rel, candidate };
+  }
+
+  async function listDirectory(relativePath = '.') {
+    const rel = normalizeDirectoryRelative(relativePath);
+    const target = guard.resolveExisting(rel);
+    const stat = await fsp.stat(target);
+    if (!stat.isDirectory()) throw new Error('workspace browse path is not a directory');
+    const entries = await fsp.readdir(target, { withFileTypes:true });
+    const results = [];
+    for (const entry of entries.sort((a,b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    })) {
+      if (entry.name === '.git' || entry.name === '.DS_Store') continue;
+      const absolute = path.join(target, entry.name);
+      try {
+        const lst = await fsp.lstat(absolute);
+        if (lst.isSymbolicLink()) continue;
+        const resolved = guard.resolveExisting(path.relative(guard.root, absolute) || '.');
+        if (resolved !== guard.root && !resolved.startsWith(guard.root + path.sep)) continue;
+        results.push({
+          name:entry.name,
+          path:path.relative(guard.root, absolute).replace(/\\/g,'/') || '.',
+          type:entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
+        });
+      } catch {}
+    }
+    return { root:guard.root, path:rel, entries:results };
   }
 
   async function inspect(relativePath) {
@@ -87,7 +121,7 @@ function createLocalWorkspaceAdapter({ root }) {
     await fsp.rename(source, destination);
   }
 
-  return { id: 'local', type: 'local', root: guard.root, capabilities: { list:true, read:true, search:true, write:true, create:true, rename:true, delete:true, watch:true, versioning:false, syncBack:false, commit:false }, inspect, readText, writeBytes, removeFile, renameFile };
+  return { id:'local', type:'local', root:guard.root, capabilities:{ list:true, read:true, search:true, write:true, create:true, rename:true, delete:true, watch:true, versioning:false, syncBack:false, commit:false }, listDirectory, inspect, readText, writeBytes, removeFile, renameFile };
 }
 
-module.exports = { createLocalWorkspaceAdapter, normalizeRelative, MAX_AGENT_FILE_BYTES };
+module.exports = { createLocalWorkspaceAdapter, normalizeRelative, normalizeDirectoryRelative, MAX_AGENT_FILE_BYTES };
