@@ -26,7 +26,7 @@ function findExecutable(name, env = process.env) {
 
 function parseLiteralTask(task) {
   const source = String(task || '').trim();
-  let match = source.match(/^(?:ubah|ganti|set)\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+(?:menjadi|ke)\s+(.+)$/i);
+  let match = source.match(/^(?:(?:ubah|ganti|set)\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s+(?:menjadi|ke)\s+(.+)$/i);
   if (!match) match = source.match(/^(?:change|set)\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+(?:to|=)\s+(.+)$/i);
   if (!match) return null;
   let value = match[2].trim();
