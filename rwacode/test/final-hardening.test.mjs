@@ -88,7 +88,9 @@ test('privileged shell has global sender/frame IPC guard and exact navigation pi
 
 test('UI binds Undo to source identity and remote Explorer never exposes local mutation menu',()=>{
   assert.match(agentSource,/appliedBySource/);assert.match(agentSource,/transactionSourceById/);assert.match(agentSource,/preparedIdentity!==currentIdentity\(\)/);assert.match(agentSource,/NO_CHANGE/);
-  assert.match(explorerSource,/Remote target Explorer is read-only/);assert.doesNotMatch(explorerSource,/chat-first-active|rwacode\.chat-first\.v2/);
+  assert.match(explorerSource,/@(?:GitHub|GoogleDrive) Explorer is read-only|Explorer is read-only/);
+  assert.match(explorerSource,/showContextMenu/);
+  assert.doesNotMatch(explorerSource,/chat-first-active|rwacode\.chat-first\.v2/);
 });
 
 test('transaction budgets are finite',()=>{assert.equal(MAX_TRANSACTION_BYTES,8*1024*1024);assert.equal(MAX_DIFF_BYTES,384*1024);});
