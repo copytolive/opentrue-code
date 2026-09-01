@@ -25,8 +25,14 @@ test('every visible primary shell control has implementation code',()=>{
   assert.doesNotMatch(agentUi,/agentProvider|ChatGPT API|Claude API|Gemini API|DeepSeek API/);
 });
 
-test('provider quick links and preview device controls have delegated handlers',()=>{
-  assert.match(html,/provider-card/);assert.match(renderer,/querySelectorAll\('\.provider-card'\)/);assert.match(html,/device-button/);assert.match(renderer,/querySelectorAll\('\.device-button'\)/);assert.match(responsive,/previewFullscreenButton/);
+test('provider-neutral browser home and preview device controls keep real interaction paths',()=>{
+  assert.match(html,/class="browser-chat-home"/);
+  assert.match(html,/⌘L/);
+  assert.doesNotMatch(html,/provider-card|https:\/\/chatgpt\.com|https:\/\/claude\.ai|https:\/\/gemini\.google\.com/);
+  assert.match(renderer,/id===['"]addressInput['"]|\$\(['"]addressInput['"]\)|addressInput/);
+  assert.match(html,/device-button/);
+  assert.match(renderer,/querySelectorAll\('\.device-button'\)/);
+  assert.match(responsive,/previewFullscreenButton/);
 });
 
 test('browser overflow menu performs real actions instead of a status-only placeholder',()=>{
