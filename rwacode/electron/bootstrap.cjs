@@ -96,6 +96,11 @@ for (const signalName of ['SIGINT', 'SIGTERM']) {
   });
 }
 
+// The Workspace Agent Bridge owns a narrow, root-locked IPC surface. It is
+// deliberately separate from provider WebContents and never intercepts their
+// keyboard, click, Send or Enter events.
+require('./agent-ipc.cjs');
+
 // Narrow, root-locked Explorer helpers (copy/cut/paste, path copy, Preview and Terminal open).
 // This is intentionally not a generic shell/execute bridge.
 require('./explorer-ops.cjs');

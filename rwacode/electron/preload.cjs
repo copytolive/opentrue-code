@@ -55,6 +55,14 @@ contextBridge.exposeInMainWorld('rwacode', {
     sendFile: (relativePath, instruction) => ipcRenderer.invoke('ai:sendFile', relativePath, instruction),
     readReply: () => ipcRenderer.invoke('ai:readReply'),
   },
+  agent: {
+    status: () => ipcRenderer.invoke('agent:getStatus'),
+    plan: (task, options) => ipcRenderer.invoke('agent:plan', task, options),
+    apply: (id) => ipcRenderer.invoke('agent:apply', id),
+    undo: (id) => ipcRenderer.invoke('agent:undo', id),
+    invalidate: () => ipcRenderer.invoke('agent:invalidate'),
+    onChanged: (handler) => ipcRenderer.on('agent:changed', (_event, state) => handler(state)),
+  },
   preview: {
     setBounds: (bounds) => ipcRenderer.invoke('preview:setBounds', bounds),
     load: (value) => ipcRenderer.invoke('preview:load', value),

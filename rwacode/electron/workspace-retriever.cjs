@@ -1,0 +1,91 @@
+'use strict';
+
+const fs = require('node:fs');
+const fsp = fs.promises;
+const path = require('node:path');
+const { createPathGuard } = require('../lib/path-guard.cjs');
+const { createProjectContextEngine } = require('./project-context.cjs');
+
+const SEARCH_MAX_FILES = 2600;
+const SEARCH_MAX_FILE_BYTES = 512 * 1024;
+const SEARCH_READ_BYTES = 96 * 1024;
+const SKIP_DIRS = new Set(['.git','node_modules','dist','build','.next','.cache','coverage','vendor','target','__pycache__','.pytest_cache','.turbo','.parcel-cache','.idea','.gradle','.mypy_cache','.ruff_cache']);
+const TEXT_EXTENSIONS = new Set(['js','jsx','ts','tsx','cjs','mjs','json','md','mdx','txt','css','scss','less','html','htm','xml','yaml','yml','toml','ini','env','py','go','rs','java','kt','kts','swift','sql','sh','bash','zsh','fish','vue','svelte','astro','rb','php','cs','cpp','cc','c','h','hpp','proto','graphql','gql','csv','tsv']);
+const SPECIAL_NAMES = new Set(['AGENTS.md','AGENTS.override.md','RWACODE.md','CLAUDE.md','README.md','package.json','Dockerfile','Makefile','Procfile','LICENSE','NOTICE']);
+
+function isSearchable(name) {
+  if (SPECIAL_NAMES.has(name)) return true;
+  const ext = path.extname(name).slice(1).toLowerCase();
+  return TEXT_EXTENSIONS.has(ext);
+}
+
+function createWorkspaceRetriever({ root }) {
+  const guard = createPathGuard(root);
+  const context = createProjectContextEngine({ root:guard.root });
+  let fileCache = null;
+
+  async function indexFiles() {
+    if (fileCache) return fileCache;
+    const files = [];
+    async function walk(relativeDir = '.', depth = 0) {
+      if (depth > 9 || files.length >= SEARCH_MAX_FILES) return;
+      let entries = [];
+      try { entries = await fsp.readdir(guard.resolveExisting(relativeDir), { withFileTypes:true }); } catch { return; }
+      entries.sort((a,b) => {
+        const priority = (entry) => entry.name === '05_HANDOFF_EVIDENCE' ? 0 : entry.name === '07_RUNTIME' ? 1 : entry.name === 'rwacode' ? 2 : entry.name === 'src' ? 3 : 10;
+        return priority(a) - priority(b) || (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1);
+      });
+      for (const entry of entries) {
+        if (files.length >= SEARCH_MAX_FILES) break;
+        if (entry.name === '.DS_Store') continue;
+        const rel = path.join(relativeDir === '.' ? '' : relativeDir, entry.name);
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(entry.name)) await walk(rel, depth + 1);
+          continue;
+        }
+        if (!entry.isFile() || !isSearchable(entry.name)) continue;
+        try {
+          const absolute = guard.resolveExisting(rel);
+          const stat = await fsp.stat(absolute);
+          if (stat.size > 0 && stat.size <= SEARCH_MAX_FILE_BYTES) files.push({ path:rel, size:stat.size, mtimeMs:stat.mtimeMs });
+        } catch {}
+      }
+    }
+    await walk();
+    fileCache = files;
+    return files;
+  }
+
+  async function searchText(query, { limit = 20 } = {}) {
+    const needle = String(query || '').trim();
+    if (!needle) return [];
+    const needleLower = needle.toLowerCase();
+    const results = [];
+    for (const meta of await indexFiles()) {
+      try {
+        const absolute = guard.resolveExisting(meta.path);
+        const handle = await fsp.open(absolute, 'r');
+        let content = '';
+        try {
+          const max = Math.min(meta.size, SEARCH_READ_BYTES);
+          const buffer = Buffer.alloc(max);
+          const { bytesRead } = await handle.read(buffer, 0, max, 0);
+          content = buffer.subarray(0, bytesRead).toString('utf8');
+        } finally { await handle.close(); }
+        const lower = content.toLowerCase();
+        const first = lower.indexOf(needleLower);
+        if (first < 0) continue;
+        let hits = 0; let offset = first;
+        while (offset >= 0 && hits < 25) { hits += 1; offset = lower.indexOf(needleLower, offset + needleLower.length); }
+        results.push({ path:meta.path, hits, size:meta.size, mtimeMs:meta.mtimeMs });
+      } catch {}
+    }
+    return results.sort((a,b) => b.hits - a.hits || b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path)).slice(0, Math.max(1, Math.min(Number(limit) || 20, 100)));
+  }
+
+  async function build(task) { return context.build(task); }
+  function invalidate() { fileCache = null; context.invalidate(); }
+  return { root:guard.root, build, searchText, invalidate };
+}
+
+module.exports = { createWorkspaceRetriever, isSearchable, SEARCH_MAX_FILES, SEARCH_MAX_FILE_BYTES, SEARCH_READ_BYTES };
