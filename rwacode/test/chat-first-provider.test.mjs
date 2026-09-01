@@ -14,9 +14,11 @@ const explorerFix = fs.readFileSync(new URL('../src/explorer-menu-fix.js', impor
 const ipc = fs.readFileSync(new URL('../electron/agent-ipc.cjs', import.meta.url), 'utf8');
 const runnerSource = fs.readFileSync(new URL('../electron/agent-runner.cjs', import.meta.url), 'utf8');
 
-test('chat-first v2 is the visible product shell with target, reference context, and preview tools', () => {
-  assert.match(html, /chat-first-v2\.css/);
-  assert.match(html, /chat-first-ui\.js/);
+test('chat-first prototype remains available for provider-safe internals but is not the visible product shell', () => {
+  assert.doesNotMatch(html, /chat-first-v2\.css/);
+  assert.doesNotMatch(html, /chat-first-ui\.js/);
+  assert.match(html, /id="browserSurface"/);
+  assert.match(html, /Native provider page/);
   for (const text of ['Editable Target','Read-only Reference Context','ChatGPT','Claude','Gemini','DeepSeek','Preview','Inspector','Console','Network','Full Screen']) assert.match(chatUi, new RegExp(text));
   assert.match(chatCss, /cf-preview-overlay/);
   assert.match(chatCss, /cf-targets/);
