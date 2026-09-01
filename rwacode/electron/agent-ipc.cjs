@@ -18,7 +18,6 @@ function broadcast(channel, payload) {
     if (!win.isDestroyed()) win.webContents.send(channel, payload);
   }
 }
-
 function journalPath() { return path.join(app.getPath('userData'), 'workspace-agent-transactions.jsonl'); }
 function onWorkspaceChanged(transaction) {
   broadcast('agent:changed', transaction);
@@ -33,13 +32,16 @@ function getGitHubManager() { if (!githubManager) githubManager = createGitHubWo
 function getGoogleDriveManager() { if (!googleDriveManager) googleDriveManager = createGoogleDriveWorkspaceManager({ stateRoot:path.join(app.getPath('userData'), 'managed-workspaces') }); return googleDriveManager; }
 async function sourceAvailability() { return { local:{available:true}, github:getGitHubManager().availability(), googledrive:await getGoogleDriveManager().availability() }; }
 
+function sourceIdentity(source = {}) {
+  return `${String(source?.type || 'local').toLowerCase()}::${String(source?.locator || '').trim()}`;
+}
 async function resolveAgent(source = {}) {
   const type = String(source?.type || 'local').toLowerCase();
   if (type === 'local') return getLocalAgent();
   const locator = String(source?.locator || '').trim();
   let mounted;
   if (type === 'github') {
-    if (!locator) throw new Error('@GitHub requires owner/repository');
+    if (!locator) throw new Error('@GitHub requires owner/repository#branch');
     mounted = await getGitHubManager().mount({ locator, ref:String(source?.ref || 'main') });
   } else if (type === 'googledrive') {
     if (!locator) throw new Error('@GoogleDrive requires a mounted Drive file/folder path');
@@ -52,14 +54,53 @@ async function resolveAgent(source = {}) {
 function rememberTransaction(agent, tx) { if (tx?.id) transactionAgents.set(tx.id, agent); while (transactionAgents.size > 100) transactionAgents.delete(transactionAgents.keys().next().value); return tx; }
 function agentForTransaction(id) { if (id && transactionAgents.has(id)) return transactionAgents.get(id); if (lastAgent) return lastAgent; return getLocalAgent(); }
 
+async function buildReferenceContext(task, targetSource, contextSources = []) {
+  const unique = [];
+  const seen = new Set([sourceIdentity(targetSource)]);
+  for (const source of Array.isArray(contextSources) ? contextSources : []) {
+    if (!source || source.enabled === false) continue;
+    const normalized = { type:String(source.type || 'local').toLowerCase(), locator:String(source.locator || '').trim(), ref:String(source.ref || 'main') };
+    const id = sourceIdentity(normalized);
+    if (seen.has(id)) continue;
+    seen.add(id); unique.push(normalized);
+    if (unique.length >= 3) break;
+  }
+  if (!unique.length) return { text:'', evidence:[] };
+
+  const sections = [];
+  const evidence = [];
+  let totalChars = 0;
+  const MAX_REFERENCE_CHARS = 180000;
+  for (const source of unique) {
+    const agent = await resolveAgent(source);
+    const built = await agent.contextForTask(task);
+    const label = `${built.workspace.type}${built.workspace.source?.locator ? `:${built.workspace.source.locator}` : ''}`;
+    const remaining = Math.max(0, MAX_REFERENCE_CHARS - totalChars);
+    if (!remaining) break;
+    const text = String(built.text || '').slice(0, remaining);
+    totalChars += text.length;
+    sections.push(`[REFERENCE SOURCE ${label}]\n${text}\n[END REFERENCE SOURCE ${label}]`);
+    evidence.push({ source, files:built.files, indexedFiles:built.indexedFiles, bytes:Math.min(built.bytes || text.length, text.length) });
+  }
+  return { text:sections.join('\n\n'), evidence };
+}
+
 ipcMain.handle('agent:getStatus', async (_event, source = { type:'local' }) => {
   const type = String(source?.type || 'local').toLowerCase();
   if ((type === 'github' || type === 'googledrive') && !source?.locator) return { ...getLocalAgent().status(), sources:await sourceAvailability() };
   const agent = await resolveAgent(source); return { ...agent.status(), sources:await sourceAvailability() };
 });
 ipcMain.handle('agent:plan', async (_event, task, options = {}) => {
-  const agent = await resolveAgent(options?.source || { type:'local' });
-  return rememberTransaction(agent, await agent.plan(String(task || ''), { mode:String(options?.mode || 'normal'), provider:String(options?.provider || 'auto') }));
+  const targetSource = options?.target || options?.source || { type:'local' };
+  const agent = await resolveAgent(targetSource);
+  const reference = await buildReferenceContext(String(task || ''), targetSource, options?.contextSources || []);
+  return rememberTransaction(agent, await agent.plan(String(task || ''), {
+    mode:String(options?.mode || 'normal'),
+    provider:String(options?.provider || 'auto'),
+    chatOnly:Boolean(options?.chatOnly),
+    extraContextText:reference.text,
+    extraContextEvidence:reference.evidence,
+  }));
 });
 ipcMain.handle('agent:apply', async (_event, id) => rememberTransaction(agentForTransaction(id), await agentForTransaction(id).apply(id || undefined)));
 ipcMain.handle('agent:undo', async (_event, id) => rememberTransaction(agentForTransaction(id), await agentForTransaction(id).undo(id || undefined)));
@@ -67,4 +108,4 @@ ipcMain.handle('agent:githubAction', async (_event, id, action, payload = {}) =>
 ipcMain.handle('agent:driveAction', async (_event, id, action, payload = {}) => { const agent=agentForTransaction(id); if (agent.adapter?.type !== 'googledrive') throw new Error('selected transaction is not from an @GoogleDrive workspace'); return agent.explicitDriveAction(String(action || ''), payload, id || undefined); });
 ipcMain.handle('agent:invalidate', async () => { for (const agent of agents.values()) agent.invalidate(); return true; });
 
-module.exports = { getLocalAgent, resolveAgent, CANONICAL_ROOT };
+module.exports = { getLocalAgent, resolveAgent, buildReferenceContext, sourceIdentity, CANONICAL_ROOT };
