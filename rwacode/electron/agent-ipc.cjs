@@ -4,11 +4,13 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const { createWorkspaceAgent } = require('./workspace-agent.cjs');
 const { createGitHubWorkspaceManager } = require('./github-workspace.cjs');
+const { createGoogleDriveWorkspaceManager } = require('./google-drive-workspace.cjs');
 
 const CANONICAL_ROOT = '/Users/Shared/WorkspaceBersama/rwa.ms/chat-local-online';
 const agents = new Map();
 const transactionAgents = new Map();
 let githubManager = null;
+let googleDriveManager = null;
 let lastAgent = null;
 
 function broadcast(channel, payload) {
@@ -43,23 +45,39 @@ function getLocalAgent() {
 }
 
 function getGitHubManager() {
-  if (!githubManager) {
-    githubManager = createGitHubWorkspaceManager({ stateRoot:path.join(app.getPath('userData'), 'managed-workspaces') });
-  }
+  if (!githubManager) githubManager = createGitHubWorkspaceManager({ stateRoot:path.join(app.getPath('userData'), 'managed-workspaces') });
   return githubManager;
+}
+
+function getGoogleDriveManager() {
+  if (!googleDriveManager) googleDriveManager = createGoogleDriveWorkspaceManager({ stateRoot:path.join(app.getPath('userData'), 'managed-workspaces') });
+  return googleDriveManager;
+}
+
+async function sourceAvailability() {
+  return {
+    local:{ available:true },
+    github:getGitHubManager().availability(),
+    googledrive:await getGoogleDriveManager().availability(),
+  };
 }
 
 async function resolveAgent(source = {}) {
   const type = String(source?.type || 'local').toLowerCase();
   if (type === 'local') return getLocalAgent();
-  if (type !== 'github') throw new Error(`unsupported workspace source: ${type}`);
   const locator = String(source?.locator || '').trim();
-  if (!locator) throw new Error('@GitHub requires owner/repository');
-  const mounted = await getGitHubManager().mount({ locator, ref:String(source?.ref || 'main') });
-  const key = mounted.adapter.id;
-  if (!agents.has(key)) {
-    agents.set(key, createWorkspaceAgent({ adapter:mounted.adapter, journalPath:journalPath(), onWorkspaceChanged }));
+  let mounted;
+  if (type === 'github') {
+    if (!locator) throw new Error('@GitHub requires owner/repository');
+    mounted = await getGitHubManager().mount({ locator, ref:String(source?.ref || 'main') });
+  } else if (type === 'googledrive') {
+    if (!locator) throw new Error('@GoogleDrive requires a mounted Drive file/folder path');
+    mounted = await getGoogleDriveManager().mount({ locator });
+  } else {
+    throw new Error(`unsupported workspace source: ${type}`);
   }
+  const key = mounted.adapter.id;
+  if (!agents.has(key)) agents.set(key, createWorkspaceAgent({ adapter:mounted.adapter, journalPath:journalPath(), onWorkspaceChanged }));
   lastAgent = agents.get(key);
   return lastAgent;
 }
@@ -77,11 +95,12 @@ function agentForTransaction(id) {
 }
 
 ipcMain.handle('agent:getStatus', async (_event, source = { type:'local' }) => {
-  if (String(source?.type || 'local').toLowerCase() === 'github' && !source?.locator) {
-    return { ...getLocalAgent().status(), sources:{ local:{ available:true }, github:getGitHubManager().availability() } };
+  const type = String(source?.type || 'local').toLowerCase();
+  if ((type === 'github' || type === 'googledrive') && !source?.locator) {
+    return { ...getLocalAgent().status(), sources:await sourceAvailability() };
   }
   const agent = await resolveAgent(source);
-  return { ...agent.status(), sources:{ local:{ available:true }, github:getGitHubManager().availability() } };
+  return { ...agent.status(), sources:await sourceAvailability() };
 });
 
 ipcMain.handle('agent:plan', async (_event, task, options = {}) => {
@@ -103,6 +122,12 @@ ipcMain.handle('agent:githubAction', async (_event, id, action, payload = {}) =>
   const agent = agentForTransaction(id);
   if (agent.adapter?.type !== 'github') throw new Error('selected transaction is not from an @GitHub workspace');
   return agent.explicitGitAction(String(action || ''), payload, id || undefined);
+});
+
+ipcMain.handle('agent:driveAction', async (_event, id, action, payload = {}) => {
+  const agent = agentForTransaction(id);
+  if (agent.adapter?.type !== 'googledrive') throw new Error('selected transaction is not from an @GoogleDrive workspace');
+  return agent.explicitDriveAction(String(action || ''), payload, id || undefined);
 });
 
 ipcMain.handle('agent:invalidate', async () => {
