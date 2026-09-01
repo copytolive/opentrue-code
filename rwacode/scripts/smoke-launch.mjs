@@ -44,13 +44,15 @@ for (let elapsed = 0; elapsed < 30000; elapsed += 250) {
 if (!ready) {
   const logs = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
   try { child.kill('SIGKILL'); } catch {}
-  throw new Error(`RWACode did not reach shell READY within 30s; exited=${exited} code=${exitCode}\n${logs}`);
+  throw new Error(`RWACode did not reach shell IPC READY within 30s; exited=${exited} code=${exitCode}\n${logs}`);
 }
 if (ready.pid !== child.pid) throw new Error(`READY marker pid mismatch: ${ready.pid} != ${child.pid}`);
 if (ready.version !== pkg.version) throw new Error(`READY marker version mismatch: ${ready.version} != ${pkg.version}`);
+if (ready.ipcRoundTrip !== true) throw new Error('READY marker missing privileged renderer IPC round-trip proof');
 if (typeof ready.url !== 'string' || !ready.url.startsWith('file:') || !ready.url.includes('index.html')) throw new Error(`READY marker shell URL invalid: ${ready.url}`);
 
 console.log(`RWACODE_SHELL_READY=PASS pid=${child.pid} version=${ready.version}`);
+console.log('RWACODE_SHELL_IPC_ROUNDTRIP=PASS');
 
 // Launch readiness is the gate. SIGTERM semantics are not equivalent to a user
 // choosing Quit on macOS, so cleanup is deliberately non-assertive after READY.
