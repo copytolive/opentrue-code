@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -15,15 +15,23 @@ function hasTrustedShellPreload(webContents) {
   const prefs = webContents?.getLastWebPreferences?.() || {};
   return String(prefs.preload || '').endsWith(`${path.sep}preload.cjs`);
 }
+function isBrowserWindowSender(webContents) {
+  try {
+    const owner = webContents ? BrowserWindow.fromWebContents(webContents) : null;
+    return Boolean(owner && !owner.isDestroyed());
+  } catch {
+    return false;
+  }
+}
 function assertTrustedIpc(event) {
   const webContents = event?.sender;
-  if (!webContents || !hasTrustedShellPreload(webContents)) throw new Error('RWACode IPC rejected: untrusted sender');
+  if (!webContents || !isBrowserWindowSender(webContents)) throw new Error('RWACode IPC rejected: untrusted sender');
   const frameUrl = normalizeFrameUrl(event?.senderFrame?.url || webContents.getURL?.());
   if (frameUrl !== normalizeFrameUrl(SHELL_ENTRY)) throw new Error('RWACode IPC rejected: untrusted frame');
-  // browser-window-created is the primary registration path. Packaged Electron can
-  // invoke preload IPC before that lifecycle registration is observable here, so
-  // bootstrap the sender only after both the exact preload and exact shell frame
-  // have been independently verified. Provider/Preview WebContents have neither.
+  // The exact local shell frame inside a BrowserWindow is the privileged boundary.
+  // Packaged Electron does not reliably expose preload metadata from event.sender,
+  // so preload identity is used for proactive hardening, not as the runtime IPC key.
+  // Provider and Preview surfaces are WebContentsView instances and fail this check.
   if (!trustedSenderId) trustedSenderId = webContents.id;
   if (webContents.id !== trustedSenderId) throw new Error('RWACode IPC rejected: untrusted sender');
 }
@@ -38,9 +46,9 @@ function installIpcGuard() {
 }
 function hardenShellWindow(win) {
   const wc = win?.webContents;
-  if (!wc || wc.isDestroyed()) return;
-  const prefs = wc.getLastWebPreferences?.() || {};
-  if (!String(prefs.preload || '').endsWith(`${path.sep}preload.cjs`)) return;
+  if (!wc || wc.isDestroyed() || !hasTrustedShellPreload(wc)) return;
+  // A newly-created genuine shell supersedes a destroyed/previous shell sender.
+  // External/provider windows do not have RWACode's preload and cannot register.
   trustedSenderId = wc.id;
   const allowShellEntry = (event, url) => {
     if (normalizeFrameUrl(url) !== normalizeFrameUrl(SHELL_ENTRY)) {

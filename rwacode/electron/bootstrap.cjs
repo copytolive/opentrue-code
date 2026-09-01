@@ -1,10 +1,10 @@
 'use strict';
 
-const { app, session } = require('electron');
+const { app, ipcMain, session } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { installIpcGuard, installShellWindowGuard } = require('./ipc-guard.cjs');
+const { installIpcGuard, installShellWindowGuard, assertTrustedIpc } = require('./ipc-guard.cjs');
 
 // Every renderer-to-main handler is shell-only. Install this before any module
 // registers ipcMain.handle(), then pin the privileged shell BrowserWindow to the
@@ -47,18 +47,22 @@ function installCiSmokeReadyMarker(){
   fs.mkdirSync(markerParent,{recursive:true});
   let realParent;try{realParent=fs.realpathSync.native(markerParent);}catch{return;}
   if(realParent!==tmpRoot&&!realParent.startsWith(`${tmpRoot}${path.sep}`))return;
-  app.on('browser-window-created',(_event,win)=>{
-    const writeReady=()=>{
-      try{
-        const url=win.webContents.getURL();
-        if(!url||!url.startsWith('file:')||!url.includes('index.html'))return;
-        const payload={pid:process.pid,version:app.getVersion(),url,readyAt:new Date().toISOString()};
-        const temp=`${marker}.${process.pid}.tmp`;
-        fs.writeFileSync(temp,`${JSON.stringify(payload)}\n`,{mode:0o600});
-        fs.renameSync(temp,marker);
-      }catch{}
-    };
-    win.webContents.once('did-finish-load',writeReady);
+  let written=false;
+  ipcMain.on('rwacode:ci-renderer-ready',(event,rendererState={})=>{
+    if(written)return;
+    try{
+      // This marker is deliberately gated on a real renderer -> ipcMain round-trip.
+      // A shell that merely paints but cannot use its own privileged IPC must fail CI.
+      assertTrustedIpc(event);
+      const url=event.sender?.getURL?.()||'';
+      if(!url.startsWith('file:')||!url.includes('index.html'))return;
+      if(String(rendererState.version||'')!==String(app.getVersion()))return;
+      const payload={pid:process.pid,version:app.getVersion(),url,ipcRoundTrip:true,readyAt:new Date().toISOString()};
+      const temp=`${marker}.${process.pid}.tmp`;
+      fs.writeFileSync(temp,`${JSON.stringify(payload)}\n`,{mode:0o600});
+      fs.renameSync(temp,marker);
+      written=true;
+    }catch{}
   });
 }
 installCiSmokeReadyMarker();

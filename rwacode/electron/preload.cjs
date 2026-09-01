@@ -29,3 +29,11 @@ contextBridge.exposeInMainWorld('rwacode', {
     setBounds: (bounds) => ipcRenderer.invoke('preview:setBounds', bounds), load: (value) => ipcRenderer.invoke('preview:load', value), reload: () => ipcRenderer.invoke('preview:reload'), openExternal: () => ipcRenderer.invoke('preview:openExternal'), onState: (handler) => ipcRenderer.on('preview:state', (_event, state) => handler(state)),
   },
 });
+
+// CI packaged smoke must prove the same privileged IPC path used by the visible
+// buttons, not merely that the BrowserWindow painted. This never runs in normal use.
+if (process.env.RWACODE_CI_SMOKE === '1') {
+  ipcRenderer.invoke('app:getState').then((state) => {
+    ipcRenderer.send('rwacode:ci-renderer-ready', { version: state?.version || '' });
+  }).catch(() => {});
+}
