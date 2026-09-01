@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('rwacode', {
     apply: (id) => ipcRenderer.invoke('agent:apply', id),
     undo: (id) => ipcRenderer.invoke('agent:undo', id),
     githubAction: (id, action, payload) => ipcRenderer.invoke('agent:githubAction', id, action, payload),
+    driveAction: (id, action, payload) => ipcRenderer.invoke('agent:driveAction', id, action, payload),
     invalidate: () => ipcRenderer.invoke('agent:invalidate'),
     onChanged: (handler) => ipcRenderer.on('agent:changed', (_event, state) => handler(state)),
   },

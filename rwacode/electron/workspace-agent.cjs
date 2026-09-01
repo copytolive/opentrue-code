@@ -59,7 +59,12 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
   }
 
   async function undo(id) {
-    return enrich(await transactions.undo(id));
+    const transactionId = id || transactions.status().lastTransaction?.id || null;
+    const driveSynced = workspaceAdapter.type === 'googledrive' && transactionId && typeof workspaceAdapter.hasSyncedTransaction === 'function' && workspaceAdapter.hasSyncedTransaction(transactionId);
+    if (driveSynced && typeof workspaceAdapter.assertRollbackSync === 'function') await workspaceAdapter.assertRollbackSync({ transactionId });
+    const undone = await transactions.undo(transactionId || undefined);
+    if (driveSynced && typeof workspaceAdapter.rollbackSync === 'function') await workspaceAdapter.rollbackSync({ transactionId });
+    return enrich(undone);
   }
 
   async function explicitGitAction(action, payload = {}, transactionId = null) {
@@ -73,6 +78,15 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
     throw new Error('unsupported explicit GitHub action');
   }
 
+  async function explicitDriveAction(action, payload = {}, transactionId = null) {
+    if (workspaceAdapter.type !== 'googledrive') throw new Error('Google Drive action requires an @GoogleDrive workspace');
+    const last = transactions.status().lastTransaction;
+    if (!last || last.status !== 'APPLIED') throw new Error('Google Drive sync requires an applied RWACode transaction');
+    if (transactionId && last.id !== transactionId) throw new Error('Google Drive action transaction does not match the active applied transaction');
+    if (action === 'sync') return workspaceAdapter.syncBack({ transactionId:last.id, paths:last.touched, ...payload });
+    throw new Error('unsupported explicit Google Drive action');
+  }
+
   function status() {
     return {
       workspace:{ id:workspaceAdapter.id, type:workspaceAdapter.type, root:workspaceAdapter.root, capabilities:workspaceAdapter.capabilities, source:workspaceAdapter.source || null },
@@ -83,7 +97,7 @@ function createWorkspaceAgent({ root = null, adapter = null, journalPath = null,
     };
   }
   function invalidate() { context.invalidate(); }
-  return { plan, apply, undo, status, invalidate, adapter:workspaceAdapter, explicitGitAction };
+  return { plan, apply, undo, status, invalidate, adapter:workspaceAdapter, explicitGitAction, explicitDriveAction };
 }
 
 module.exports = { createWorkspaceAgent };
