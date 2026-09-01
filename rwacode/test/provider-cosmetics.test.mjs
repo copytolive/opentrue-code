@@ -5,16 +5,19 @@ import fs from 'node:fs';
 const bridge = fs.readFileSync(new URL('../electron/ai-bridge.cjs', import.meta.url), 'utf8');
 const preload = fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8');
 
-test('ChatGPT Work onboarding cleanup is fixed and allowlisted rather than a generic renderer primitive', () => {
+test('ChatGPT Work cleanup is one-shot and allowlisted rather than a permanent DOM observer', () => {
   assert.match(bridge, /function installProviderCosmetics\(/);
   assert.match(bridge, /provider !== 'ChatGPT'/);
   assert.match(bridge, /kenali chatgpt work/);
   assert.match(bridge, /sesuaikan work untuk saya/);
-  assert.match(bridge, /MutationObserver/);
+  assert.doesNotMatch(bridge, /MutationObserver/);
+  assert.doesNotMatch(bridge, /observer\.observe/);
   assert.doesNotMatch(preload, /executeJavaScript|providerCosmetics|cosmeticScript/);
 });
 
-test('provider cosmetics never hide the real composer', () => {
+test('provider cosmetics never hide or rewrite the real composer or conversation messages', () => {
   assert.match(bridge, /const hasComposer = !!candidate\.querySelector/);
   assert.match(bridge, /!hasComposer/);
+  assert.doesNotMatch(bridge, /node\.textContent = task/);
+  assert.doesNotMatch(bridge, /rwacodeTaskOnly/);
 });
