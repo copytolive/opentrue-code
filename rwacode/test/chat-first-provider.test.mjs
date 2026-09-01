@@ -19,9 +19,12 @@ const preload=fs.readFileSync(new URL('../electron/preload.cjs',import.meta.url)
 
 function tempRoot(){return fs.mkdtempSync(path.join(os.tmpdir(),'rwacode-no-ai-'));}
 
-test('visible product is native browser shell plus RWACode-owned Workspace Agent',()=>{
+test('visible product is provider-neutral native browser shell plus RWACode-owned Workspace Agent',()=>{
   assert.match(html,/id="browserSurface"/);
-  assert.match(html,/Native provider page/);
+  assert.match(html,/Browser Chat/);
+  assert.match(html,/Native web chat/);
+  assert.match(html,/Human-controlled · NO_AI_API/);
+  assert.doesNotMatch(html,/provider-card|https:\/\/chatgpt\.com|https:\/\/claude\.ai|https:\/\/gemini\.google\.com/);
   assert.match(agentUi,/RWACode Workspace Agent/);
   assert.match(agentUi,/@Local/);
   assert.match(agentUi,/@GitHub/);
