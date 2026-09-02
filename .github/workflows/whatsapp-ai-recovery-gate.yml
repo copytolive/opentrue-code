@@ -1,0 +1,15 @@
+name: WhatsApp AI Recovery Gate
+on:
+  push:
+    branches:
+      - whatsapp-ai-public-bootstrap
+permissions:
+  contents: read
+jobs:
+  recovery-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recovery shell syntax
+        run: bash -n whatsapp-ai/recover.sh
