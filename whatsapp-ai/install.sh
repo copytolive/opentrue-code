@@ -93,9 +93,39 @@ for p in root.glob("*.sh"):
 print(f"RUNTIME_NEWLINE_REPAIR={fixed}")
 PY
 
+if [ ! -d "$ROOT/05_model_runtime/ollama" ]; then
+  OLLAMA_FOUND="$(find "$ROOT" -maxdepth 4 -type d -name ollama -exec test -f '{}/CMakeLists.txt' ';' -print -quit 2>/dev/null || true)"
+  if [ -n "$OLLAMA_FOUND" ]; then
+    mkdir -p "$ROOT/05_model_runtime"
+    ln -sfn "$OLLAMA_FOUND" "$ROOT/05_model_runtime/ollama"
+    echo "OLLAMA_PATH_LINKED=$OLLAMA_FOUND"
+  fi
+fi
+
 echo "LAUNCH_PIPELINE=START"
 bash "$ROOT/LOCAL_RUNTIME/control/launch_pipeline.sh"
 echo "LAUNCH_PIPELINE=PASS"
+
+HEALTH_JSON="$(curl -fsS --max-time 5 http://127.0.0.1:8787/health 2>/dev/null || printf '{}')"
+mkdir -p "$STATE/repo/status"
+python3 - "$STATE/repo/status/whatsapp_ai_launch.json" "$HEALTH_JSON" <<'PY'
+import json,sys
+from datetime import datetime,timezone
+p=sys.argv[1]
+try: health=json.loads(sys.argv[2])
+except Exception: health={}
+receipt={
+  "profile":"WHATSAPP_AI_LOCAL_CONTROL_V1",
+  "launch":"PASS",
+  "health":health,
+  "updatedAt":datetime.now(timezone.utc).isoformat()
+}
+open(p,"w",encoding="utf-8").write(json.dumps(receipt,indent=2))
+PY
+git -C "$STATE/repo" add status/whatsapp_ai_launch.json
+git -C "$STATE/repo" commit -m "whatsapp-ai: local launch receipt" >/dev/null 2>&1 || true
+git -C "$STATE/repo" pull --rebase origin "$PRIVATE_BRANCH" >/dev/null 2>&1 || true
+git -C "$STATE/repo" push origin "$PRIVATE_BRANCH" >/dev/null 2>&1 || true
 
 open "http://127.0.0.1:8787" >/dev/null 2>&1 || true
 echo "WHATSAPP_AI_READY=PASS"
