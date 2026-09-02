@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenTrue Code</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">◇</span><b>OpenTrue Code</b><span id="version" class="muted"></span></div>
+    <div class="statusline">
+      <span id="engineStatus" class="badge good">Engine local</span>
+      <span id="remoteStatus" class="badge">Server disconnected</span>
+      <span id="providerStatus" class="badge">Provider</span>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <section>
+      <h3>Workspace</h3>
+      <button id="pickWorkspace" class="primary">Open Git Repository</button>
+      <div id="workspacePath" class="path muted">No workspace selected</div>
+      <button id="refreshFiles" class="ghost">Refresh files</button>
+    </section>
+    <section>
+      <h3>Files</h3>
+      <input id="fileFilter" placeholder="Filter files">
+      <div id="files" class="files"></div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <section class="editorPane">
+      <div class="paneHead">
+        <span id="activeFile">No file open</span>
+        <label class="approve"><input id="writeApproval" type="checkbox"> approve direct file write</label>
+        <button id="saveFile" class="ghost">Save</button>
+      </div>
+      <textarea id="editor" spellcheck="false" placeholder="Choose a file from the workspace."></textarea>
+    </section>
+
+    <section class="bottomPane">
+      <div class="tabs">
+        <button class="tab active" data-panel="chat">Agent</button>
+        <button class="tab" data-panel="tasks">Tasks</button>
+        <button class="tab" data-panel="settings">AI & Server</button>
+      </div>
+
+      <div id="panel-chat" class="panel active">
+        <div class="chatToolbar">
+          <select id="mode">
+            <option>Ask</option><option>Plan</option><option selected>Agent</option><option>Debug</option>
+          </select>
+          <label><input id="agentApproval" type="checkbox"> approve writes for Agent/Debug</label>
+        </div>
+        <div id="conversation" class="conversation">
+          <div class="msg system">OpenTrue Engine ready. Choose a Git repository and configure an AI provider.</div>
+        </div>
+        <div class="composer">
+          <textarea id="prompt" placeholder="Ask, plan, edit, debug, test, or prepare Git changes…"></textarea>
+          <button id="send" class="primary">Run</button>
+        </div>
+      </div>
+
+      <div id="panel-tasks" class="panel">
+        <div class="taskButtons">
+          <button data-task="git_status">Git status</button>
+          <button data-task="git_diff">Git diff</button>
+          <button data-task="test">Test</button>
+          <button data-task="lint">Lint</button>
+          <button data-task="typecheck">Typecheck</button>
+          <button data-task="build">Build</button>
+          <button data-task="checkpoint">Checkpoint</button>
+        </div>
+        <pre id="taskOutput">No task run yet.</pre>
+      </div>
+
+      <div id="panel-settings" class="panel">
+        <div class="settingsGrid">
+          <label>Provider
+            <select id="provider">
+              <option value="ollama">Ollama (local)</option>
+              <option value="openai">OpenAI / ChatGPT API</option>
+              <option value="anthropic">Anthropic / Claude</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openai-compatible">OpenAI-compatible</option>
+              <option value="lmstudio">LM Studio (local)</option>
+            </select>
+          </label>
+          <label>Model<input id="model" placeholder="qwen3-coder:30b"></label>
+          <label class="wide">Endpoint<input id="endpoint" placeholder="http://127.0.0.1:11434"></label>
+          <label class="wide">API key<input id="apiKey" type="password" placeholder="Leave blank to keep stored key"></label>
+          <label class="wide">Control-plane URL<input id="controlPlaneUrl" placeholder="https://server.example.com/api"></label>
+          <label class="wide">Control-plane token<input id="controlPlaneToken" type="password" placeholder="Leave blank to keep stored token"></label>
+        </div>
+        <div class="settingsActions">
+          <button id="saveSettings" class="primary">Save secure settings</button>
+          <button id="connectRemote">Connect server</button>
+          <button id="disconnectRemote" class="ghost">Disconnect</button>
+        </div>
+        <p id="secureNote" class="muted"></p>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="./app.js"></script>
+</body>
+</html>

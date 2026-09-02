@@ -1,0 +1,152 @@
+name: Desktop Engine
+
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - "desktop/**"
+      - "agent-runtime/**"
+      - "local-bridge/**"
+      - "scripts/install-desktop-*"
+      - "docs/DESKTOP_ENGINE.md"
+      - ".github/workflows/desktop-engine.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine/**"
+      - "desktop/**"
+      - "agent-runtime/**"
+      - "local-bridge/**"
+      - "scripts/install-desktop-*"
+      - "docs/DESKTOP_ENGINE.md"
+      - ".github/workflows/desktop-engine.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  engine-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Engine syntax
+        run: npm run check
+        working-directory: engine
+      - name: Engine provider tests
+        run: npm test
+        working-directory: engine
+      - name: Existing agent runtime tests
+        run: npm test
+        working-directory: agent-runtime
+      - name: Existing Local Bridge tests
+        run: npm test
+        working-directory: local-bridge
+      - name: Desktop source syntax
+        run: |
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          node --check desktop/renderer/app.js
+      - name: Windows-safe workspace delimiter contract
+        shell: bash
+        run: |
+          grep -q 'split(delimiter)' local-bridge/src/bridge.mjs
+          grep -q 'roots.join(delimiter)' engine/src/server.mjs
+
+  desktop-build:
+    needs: engine-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            script: dist:mac-arm64
+            artifact: desktop-macos-arm64
+          - os: macos-15-intel
+            script: dist:mac-x64
+            artifact: desktop-macos-x64
+          - os: windows-2025
+            script: dist:win-x64
+            artifact: desktop-windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Install desktop packager
+        run: npm install --no-audit --no-fund
+        working-directory: desktop
+      - name: Desktop source check
+        run: npm run check
+        working-directory: desktop
+      - name: Build installer
+        run: npm run ${{ matrix.script }}
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Smoke macOS DMG installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(find desktop/dist -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          mount="$(mktemp -d)"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" >/dev/null
+          test -x "$mount/OpenTrue Code.app/Contents/MacOS/OpenTrue Code"
+          hdiutil detach "$mount" -quiet
+          rmdir "$mount"
+      - name: Smoke Windows NSIS installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem desktop/dist/*.exe | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer not found" }
+          $p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "NSIS silent install failed: $($p.ExitCode)" }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter 'OpenTrue Code.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "Installed OpenTrue Code.exe not found" }
+          Write-Host "PASS: installed $($exe.FullName)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: desktop-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: desktop-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Publish installable macOS and Windows release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="desktop-v0.3.${GITHUB_RUN_NUMBER}"
+          cd release-artifacts
+          sha256sum * | tee SHA256SUMS.txt
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "OpenTrue Code Desktop ${tag}" \
+            --notes "Cross-platform OpenTrue Engine desktop build. Includes macOS arm64/x64 and Windows x64 installers. Builds are unsigned unless repository signing credentials are configured." \
+            --latest \
+            *

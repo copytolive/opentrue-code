@@ -1,13 +1,14 @@
 import {spawn} from "node:child_process";
 import {createHash,randomUUID} from "node:crypto";
+import {delimiter} from "node:path";
 import {approvedRoot,commandFor} from "./policy.mjs";
 
 const URL=(process.env.CONTROL_PLANE_URL||"").replace(/\/$/,"");
 const TOKEN=process.env.CONTROL_PLANE_TOKEN||"";
-const ROOTS=(process.env.APPROVED_WORKSPACE_ROOTS||"").split(":").filter(Boolean);
+const ROOTS=(process.env.APPROVED_WORKSPACE_ROOTS||"").split(delimiter).filter(Boolean);
 const WORKER=process.env.BRIDGE_ID||randomUUID();
 const LEASE_MS=Math.max(30000,Number(process.env.WORKER_LEASE_MS||90000));
-if(!URL.startsWith("https://")&&!URL.startsWith("http://localhost")){
+if(!URL.startsWith("https://")&&!URL.startsWith("http://localhost")&&!URL.startsWith("http://127.0.0.1")){
   console.error("CONTROL_PLANE_URL must use HTTPS or localhost");process.exit(1);
 }
 if(TOKEN.length<24||!ROOTS.length){
@@ -27,7 +28,7 @@ async function execute(job){
   const heartbeat=setInterval(()=>post(`/v1/workers/jobs/${job.id}/heartbeat`,{workerId:WORKER,leaseMs:LEASE_MS}).catch(e=>console.error("heartbeat",String(e))),Math.max(10000,Math.floor(LEASE_MS/3)));
   heartbeat.unref();
   const result=await new Promise(resolve=>{
-    const child=spawn(cmd,args,{cwd,env:{PATH:process.env.PATH||"/usr/local/bin:/usr/bin:/bin",CI:"true"},stdio:["ignore","pipe","pipe"]});
+    const child=spawn(cmd,args,{cwd,env:{PATH:process.env.PATH||"",CI:"true"},stdio:["ignore","pipe","pipe"],windowsHide:true});
     const add=(stream,data)=>output.push({stream,at:new Date().toISOString(),text:String(data).slice(0,16000)});
     child.stdout.on("data",d=>add("stdout",d));child.stderr.on("data",d=>add("stderr",d));
     const timer=setTimeout(()=>{timedOut=true;child.kill("SIGTERM");setTimeout(()=>child.kill("SIGKILL"),3000).unref()},job.timeoutMs);
