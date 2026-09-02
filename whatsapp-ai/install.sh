@@ -29,6 +29,28 @@ gh auth setup-git >/dev/null 2>&1 || true
 
 mkdir -p "$STATE" "$HOME/Library/LaunchAgents"
 
+# Isolated recovery: stop only the WhatsApp AI bridge/task tree if a previous
+# launch is stuck. This does not touch CopyToLive/OpenTrue services.
+kill_tree() {
+  local pid="$1"
+  local child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+}
+
+launchctl bootout "gui/$(id -u)/com.copytolive.whatsapp-ai-local-control" >/dev/null 2>&1 || true
+
+for pid in $(pgrep -f "$STATE/whatsapp_ai_local_bridge.py" 2>/dev/null || true); do
+  kill_tree "$pid"
+done
+for pid in $(pgrep -f "$ROOT/LOCAL_RUNTIME/control/launch_pipeline.sh" 2>/dev/null || true); do
+  kill_tree "$pid"
+done
+sleep 2
+
+
 if [ ! -d "$STATE/repo/.git" ]; then
   rm -rf "$STATE/repo"
   gh repo clone "$PRIVATE_REPO" "$STATE/repo" -- --branch "$PRIVATE_BRANCH" --single-branch
