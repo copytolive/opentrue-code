@@ -77,5 +77,26 @@ find "$ROOT/LOCAL_RUNTIME/control" -type f -name '*.sh' -exec chmod 700 {} \;
 echo
 echo "BRIDGE_ACTIVATED=PASS"
 echo "PROFILE=$PROFILE"
-echo "The private queue will continue bootstrap/start/health automatically."
+
+python3 - "$ROOT/LOCAL_RUNTIME/control" <<'PY'
+from pathlib import Path
+import sys
+root=Path(sys.argv[1])
+fixed=0
+for p in root.glob("*.sh"):
+    s=p.read_text(encoding="utf-8")
+    n=s.replace("\\nsource ", "\nsource ")
+    if n != s:
+        p.write_text(n,encoding="utf-8")
+        p.chmod(0o700)
+        fixed += 1
+print(f"RUNTIME_NEWLINE_REPAIR={fixed}")
+PY
+
+echo "LAUNCH_PIPELINE=START"
+bash "$ROOT/LOCAL_RUNTIME/control/launch_pipeline.sh"
+echo "LAUNCH_PIPELINE=PASS"
+
+open "http://127.0.0.1:8787" >/dev/null 2>&1 || true
+echo "WHATSAPP_AI_READY=PASS"
 echo "You can close this Terminal window."
