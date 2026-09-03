@@ -1,0 +1,48 @@
+name: AI3 CopyToLive VPS Selfhosted Probe
+on:
+  push:
+    branches: [ai3-copytolive-vps-probe]
+    paths:
+      - ".github/workflows/ai3-copytolive-vps-selfhosted-probe.yml"
+      - "ai3-copytolive-vps-probe/**"
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: req
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="$(find ai3-copytolive-vps-probe -maxdepth 1 -type f -name '*.json' | sort | tail -n1)"
+          ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$FILE")"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+      - name: Verify local VPS paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ai3-copytolive-vps-probe-results
+          python3 - <<'PY' > "ai3-copytolive-vps-probe-results/${{ steps.req.outputs.id }}.json"
+          import os,json,socket
+          print(json.dumps({
+            "ok":True,
+            "hostname":socket.gethostname(),
+            "web":os.path.isdir("/var/www/copytolive"),
+            "backend":os.path.isdir("/home/opentrue-platform/backend"),
+            "uid":os.geteuid()
+          }))
+          PY
+      - name: Commit probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "CopyToLive AI3 VPS Probe"
+          git config user.email "copytolive-ai3-vpsprobe@local.invalid"
+          git add ai3-copytolive-vps-probe-results
+          git commit -m "ai3 CopyToLive VPS probe: ${{ steps.req.outputs.id }}" || true
+          git push origin HEAD:ai3-copytolive-vps-probe
